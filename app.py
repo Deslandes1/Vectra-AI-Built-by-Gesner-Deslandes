@@ -18,8 +18,8 @@ st.markdown("""
 <div style="text-align: center;">
     <h1>🚗 Vectra AI – Dust Road</h1>
     <p style="font-size: 1.1rem;">built by <strong>Gesner Deslandes</strong></p>
-    <p>Self‑Driving Car on a winding dirt road – never leaves the road, avoids other cars automatically</p>
-    <p><strong>Click on the road to add another car. Watch the AI avoid it and stay on the road.</strong></p>
+    <p>Self‑Driving Car on a winding dirt road – avoids all other cars automatically</p>
+    <p><strong>Click "Add Random Car" to place obstacles. The AI will steer around them and stay on the road.</strong></p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -41,7 +41,7 @@ sim_html = """
 <div style="text-align: center; margin-top: 10px;">
     <button id="resetBtn">🔄 Reset Drive</button>
     <button id="clearObstaclesBtn">🗑️ Clear Other Cars</button>
-    <button id="randomObstaclesBtn">🎲 Add Random Car</button>
+    <button id="randomObstaclesBtn">🎲 Add Random Cars (3-5)</button>
 </div>
 
 <script>
@@ -59,8 +59,8 @@ sim_html = """
         const SENSOR_COUNT = 5;
         const MAX_SPEED = 3.5;
         const TURN_SPEED = 0.12;
-        const PATH_FOLLOW_STRENGTH = 0.7;     // how strongly to follow road center
-        const ROAD_PULL_STRENGTH = 0.05;      // gentle pull back to road when off
+        const PATH_FOLLOW_STRENGTH = 0.7;
+        const ROAD_PULL_STRENGTH = 0.05;
 
         let car = {
             x: 50,
@@ -128,13 +128,13 @@ sim_html = """
         function updateCar() {
             if (!car.alive) return;
             
-            // 1. Path following: desired angle towards road center ahead
+            // Path following: desired angle towards road center ahead
             let targetY = getRoadCenterY(car.x + 15);
             let dyTarget = targetY - (car.y + CAR_HEIGHT/2);
             let desiredAngle = Math.atan2(dyTarget, 20) * 0.8;
             desiredAngle = Math.min(Math.max(desiredAngle, -0.4), 0.4);
             
-            // 2. Obstacle avoidance via sensors
+            // Obstacle avoidance via sensors
             let sensors = [];
             let angles = [-0.8, -0.4, 0, 0.4, 0.8];
             for (let i = 0; i < SENSOR_COUNT; i++) {
@@ -168,7 +168,7 @@ sim_html = """
             let rightThreat = threats[3] + threats[4];
             let avoidSteer = (rightThreat - leftThreat) * 0.9;
             
-            // 3. Road pull: if the car is too far from the road center, add a correction
+            // Road pull: if car is too far from road center, add correction
             let currentYcenter = car.y + CAR_HEIGHT/2;
             let roadY = getRoadCenterY(car.x);
             let yDiff = roadY - currentYcenter;
@@ -196,15 +196,13 @@ sim_html = """
                 let targetY = getRoadCenterY(car.x);
                 let correction = (targetY - (car.y + CAR_HEIGHT/2)) * 0.2;
                 car.y += correction;
-                // also reduce speed to simulate bumpy terrain
                 car.speed *= 0.98;
-                // if still far off, slowly steer back
                 if (Math.abs(correction) > 5) {
                     car.angle += correction * 0.01;
                 }
             }
             
-            // Final boundary (absolute screen edges, but we should never hit them if road following works)
+            // Final boundary check
             if (car.x < 5 || car.x + CAR_WIDTH > W - 5 || car.y < 25 || car.y + CAR_HEIGHT > H - 25) {
                 car.alive = false;
                 statusSpan.innerText = "Went off the road!";
@@ -228,7 +226,7 @@ sim_html = """
         function draw() {
             drawDustRoad();
             
-            // Draw other cars (brown/gray)
+            // Draw other cars
             for (let obs of obstacles) {
                 ctx.fillStyle = "#8b5a2b";
                 ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
@@ -257,7 +255,7 @@ sim_html = """
                 ctx.stroke();
             }
             
-            // Our car (dusty green)
+            // Our car
             ctx.fillStyle = "#6a994e";
             ctx.fillRect(car.x, car.y, CAR_WIDTH, CAR_HEIGHT);
             ctx.fillStyle = "#bcbcbc";
@@ -303,11 +301,25 @@ sim_html = """
             updateUI();
         }
 
-        function addRandomObstacle() {
-            let x = car.x + Math.random() * 200 + 80;
-            let y = getRoadCenterY(x) - OBSTACLE_SIZE/2 + (Math.random() - 0.5) * 20;
-            y = Math.min(Math.max(y, 40), H - OBSTACLE_SIZE - 40);
-            obstacles.push({ x: x, y: y, w: OBSTACLE_SIZE, h: OBSTACLE_SIZE });
+        function addRandomObstacles() {
+            // Add between 3 and 5 random cars ahead on the road
+            let count = Math.floor(Math.random() * 3) + 3;
+            for (let i = 0; i < count; i++) {
+                let x = car.x + Math.random() * 300 + 100;
+                let y = getRoadCenterY(x) - OBSTACLE_SIZE/2 + (Math.random() - 0.5) * 20;
+                y = Math.min(Math.max(y, 40), H - OBSTACLE_SIZE - 40);
+                // Avoid placing exactly on top of existing obstacles
+                let tooClose = false;
+                for (let obs of obstacles) {
+                    if (Math.abs(obs.x - x) < 50) {
+                        tooClose = true;
+                        break;
+                    }
+                }
+                if (!tooClose) {
+                    obstacles.push({ x: x, y: y, w: OBSTACLE_SIZE, h: OBSTACLE_SIZE });
+                }
+            }
             updateUI();
         }
 
@@ -318,7 +330,6 @@ sim_html = """
             const scaleY = canvas.height / rect.height;
             let mouseX = (e.clientX - rect.left) * scaleX;
             let mouseY = (e.clientY - rect.top) * scaleY;
-            // Only allow adding if click is on the road (within ~40 pixels of center)
             let roadY = getRoadCenterY(mouseX);
             if (Math.abs(mouseY - roadY) < 45) {
                 obstacles.push({ x: mouseX - OBSTACLE_SIZE/2, y: mouseY - OBSTACLE_SIZE/2, w: OBSTACLE_SIZE, h: OBSTACLE_SIZE });
@@ -328,7 +339,7 @@ sim_html = """
 
         document.getElementById('resetBtn').addEventListener('click', () => { resetSimulation(); });
         document.getElementById('clearObstaclesBtn').addEventListener('click', () => { clearObstacles(); });
-        document.getElementById('randomObstaclesBtn').addEventListener('click', () => { addRandomObstacle(); });
+        document.getElementById('randomObstaclesBtn').addEventListener('click', () => { addRandomObstacles(); });
 
         resetSimulation();
         gameLoop();
@@ -340,23 +351,21 @@ st.components.v1.html(sim_html, height=560, scrolling=False)
 
 st.markdown("""
 ---
-### 🧠 How Vectra AI stays on the dust road
+### 🧠 How Vectra AI avoids random obstacles
 
-- The road is a **winding dirt path** defined by a smooth curve.
-- The car uses **three steering forces**:
-  1. **Path following** – steers toward the road center ahead.
-  2. **Obstacle avoidance** – sensors detect other cars and steer away.
-  3. **Road pull** – gently pushes the car back onto the road if it starts to drift.
-- The car **never leaves the road** – if it tries, a correction force pulls it back and reduces speed.
-- You can click anywhere **on the road** to add another car, or use the **"Add Random Car"** button.
-- The simulation runs forever – the car keeps driving and avoiding obstacles as long as possible.
+- The **"Add Random Cars"** button places **3 to 5** other vehicles ahead on the road.
+- The car’s **5 sensors** detect these obstacles from a distance.
+- The AI **steers away** from the closest obstacle while **staying on the road** (path following + road pull).
+- Speed automatically reduces when an obstacle is near.
+- You can also **click directly on the road** to add individual cars.
+- The simulation runs forever – the car will keep avoiding all obstacles you place.
 
 ### 🎮 Controls
 
-- **Click** on the road to add another vehicle (must be on the brown path).
-- **Reset Drive** – restarts the simulation.
+- **Add Random Cars** – places several obstacles ahead.
 - **Clear Other Cars** – removes all obstacles.
-- **Add Random Car** – places one random car ahead on the road.
+- **Reset Drive** – restarts the simulation.
+- **Click on the road** – add a single car at that position.
 
 ### 🚀 Future neural network integration
 

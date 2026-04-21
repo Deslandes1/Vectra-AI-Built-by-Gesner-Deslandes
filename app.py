@@ -18,7 +18,7 @@ st.markdown("""
 <div style="text-align: center;">
     <h1>🚗 Vectra AI</h1>
     <p style="font-size: 1.1rem;">built by <strong>Gesner Deslandes</strong></p>
-    <p>Self‑Driving Car Simulator – rule‑based AI with 5 sensors</p>
+    <p>Self‑Driving Car Simulator – rule‑based AI with 5 sensors and lane keeping</p>
     <p><strong>Click on the canvas to add obstacles. Watch the AI navigate.</strong></p>
 </div>
 """, unsafe_allow_html=True)
@@ -30,7 +30,7 @@ video_url = "https://raw.githubusercontent.com/Deslandes1/Vectra-AI-Built-by-Ges
 st.video(video_url)
 st.caption("Note: If the video does not play, your browser may not support the MP4 format. Try viewing this app in Chrome or Edge.")
 
-# --- The Simulation Canvas (improved obstacle avoidance) ---
+# --- The Simulation Canvas (lane‑keeping + obstacle avoidance) ---
 sim_html = """
 <canvas id="gameCanvas" width="900" height="500" tabindex="0" style="outline: none; cursor: crosshair;"></canvas>
 <div class="info">
@@ -55,10 +55,11 @@ sim_html = """
         const W = 900, H = 500;
         const CAR_WIDTH = 30, CAR_HEIGHT = 20;
         const OBSTACLE_SIZE = 30;
-        const SENSOR_LENGTH = 120;
+        const SENSOR_LENGTH = 130;
         const SENSOR_COUNT = 5;
-        const MAX_SPEED = 3.5;      // slightly slower for better control
+        const MAX_SPEED = 3.8;
         const TURN_SPEED = 0.12;
+        const LANE_KEEP_STRENGTH = 0.6;  // how strongly to return to straight angle
 
         let car = {
             x: 60,
@@ -96,15 +97,13 @@ sim_html = """
 
         function randomObstacles() {
             obstacles = [];
-            // Place obstacles only in the right half of the screen, away from car's start
             for (let i = 0; i < 12; i++) {
                 let x, y;
                 let valid = false;
                 let attempts = 0;
                 while (!valid && attempts < 30) {
-                    x = Math.random() * (W - OBSTACLE_SIZE - 150) + 150;  // min x = 150
+                    x = Math.random() * (W - OBSTACLE_SIZE - 100) + 100;
                     y = Math.random() * (H - OBSTACLE_SIZE - 80) + 40;
-                    // Avoid placing obstacles too close to the car's starting area
                     let distToCarStart = Math.hypot(x - 60, y - (H-100));
                     if (distToCarStart > 100) {
                         valid = true;
@@ -154,11 +153,19 @@ sim_html = """
             let threats = sensors.map(d => Math.max(0, (SENSOR_LENGTH - d) / SENSOR_LENGTH));
             let leftThreat = threats[0] + threats[1];
             let rightThreat = threats[3] + threats[4];
-            let steer = (rightThreat - leftThreat) * 0.9;
+            // Obstacle avoidance steering
+            let avoidSteer = (rightThreat - leftThreat) * 0.9;
+            // Lane keeping: return to angle 0 (straight)
+            let laneSteer = -car.angle * LANE_KEEP_STRENGTH;
+            // Combine: when no threat, lane keeping dominates; when threat, avoid overrides
+            let totalSteer = avoidSteer + laneSteer;
+            // Limit maximum steering
+            totalSteer = Math.min(Math.max(totalSteer, -0.5), 0.5);
+            
             let frontThreat = threats[2];
             let speedTarget = MAX_SPEED * (1 - frontThreat * 0.9);
             car.speed += (speedTarget - car.speed) * 0.1;
-            car.angle += steer * TURN_SPEED;
+            car.angle += totalSteer * TURN_SPEED;
             car.angle = Math.min(Math.max(car.angle, -Math.PI/2.5), Math.PI/2.5);
         }
 
@@ -190,22 +197,33 @@ sim_html = """
             ctx.clearRect(0, 0, W, H);
             ctx.fillStyle = "#2c3e50";
             ctx.fillRect(0, 0, W, H);
+            // Draw lane center line (dashed)
+            ctx.beginPath();
+            ctx.strokeStyle = "#ffcc00";
+            ctx.lineWidth = 2;
+            ctx.setLineDash([15, 20]);
+            let laneY = H - 100;
+            ctx.moveTo(0, laneY);
+            ctx.lineTo(W, laneY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            // Road lines
             ctx.strokeStyle = "#ffcc00";
             ctx.lineWidth = 4;
-            ctx.setLineDash([20, 30]);
             for (let y = 0; y < H; y += 50) {
+                if (Math.abs(y - laneY) < 30) continue; // avoid clashing with lane line
                 ctx.beginPath();
                 ctx.moveTo(0, y);
                 ctx.lineTo(W, y);
                 ctx.stroke();
             }
-            ctx.setLineDash([]);
             for (let obs of obstacles) {
                 ctx.fillStyle = "#e74c3c";
                 ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
                 ctx.fillStyle = "#c0392b";
                 ctx.fillRect(obs.x+5, obs.y+5, obs.w-10, obs.h-10);
             }
+            // Sensors
             ctx.beginPath();
             ctx.strokeStyle = "#00ffcc";
             ctx.lineWidth = 1;
@@ -220,6 +238,7 @@ sim_html = """
                 ctx.lineTo(endX, endY);
                 ctx.stroke();
             }
+            // Car
             ctx.fillStyle = "#2ecc71";
             ctx.fillRect(car.x, car.y, CAR_WIDTH, CAR_HEIGHT);
             ctx.fillStyle = "#ecf0f1";
@@ -249,7 +268,6 @@ sim_html = """
             const scaleY = canvas.height / rect.height;
             let mouseX = (e.clientX - rect.left) * scaleX;
             let mouseY = (e.clientY - rect.top) * scaleY;
-            // Prevent adding obstacles too close to the car
             let distToCar = Math.hypot(mouseX - (car.x + CAR_WIDTH/2), mouseY - (car.y + CAR_HEIGHT/2));
             if (distToCar > 50) {
                 obstacles.push({ x: mouseX - OBSTACLE_SIZE/2, y: mouseY - OBSTACLE_SIZE/2, w: OBSTACLE_SIZE, h: OBSTACLE_SIZE });
@@ -294,22 +312,22 @@ st.markdown("""
         <text x="180" y="60" fill="#00ffcc" font-size="12">Far left</text>
         <text x="410" y="60" fill="#00ffcc" font-size="12">Far right</text>
     </svg>
-    <p><em>Diagram: The car uses 5 sensors (rays) to detect obstacles. The AI steers away from the closest one.</em></p>
+    <p><em>Diagram: The car uses 5 sensors (rays) to detect obstacles. The AI steers away from the closest one and returns to straight lane.</em></p>
 </div>
 """, unsafe_allow_html=True)
 
 st.markdown("""
 - The car has **5 sensors** (rays) pointing forward at different angles.
 - Each sensor measures the distance to the nearest obstacle or screen edge.
-- The AI steers away from the side where the closest obstacle is detected.
+- The AI **combines obstacle avoidance** (steer away from the closest obstacle) with **lane keeping** (return to straight angle).
 - Speed is reduced when the front sensor is very close to an obstacle.
-- This is a simplified **rule‑based autonomous driving** system – similar to early self‑driving experiments.
+- This creates natural driving behavior: stay straight, swerve around obstacles, then straighten again.
 
 ### 🎮 Controls
 
 - **Click** anywhere on the canvas to add an obstacle (but not too close to the car).
 - Use the buttons to reset, clear, or add random obstacles (placed safely away from the car).
-- The car will try to avoid them automatically.
+- The car will try to avoid them automatically while staying on the road lane.
 
 ### 🚀 Future neural network integration
 

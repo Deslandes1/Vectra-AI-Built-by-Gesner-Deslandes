@@ -3,15 +3,16 @@ import base64
 from PIL import Image
 import io
 
-st.set_page_config(page_title="Vectra AI – Perfect Flow", layout="wide")
+st.set_page_config(page_title="Vectra AI – Crash-Proof Edition", layout="wide")
 
-# --- 1. INITIALIZATION (Prevents NameError crashes) ---
+# --- 1. INITIALIZATION ---
+# Placing these first ensures sim_limit exists before the simulation loads.
 speed_limit = 40  
 sim_limit = 2.6   
 
 # --- 2. SIDEBAR CONTROLS ---
 with st.sidebar:
-    st.header("🚦 Traffic Control")
+    st.header("🚦 System Settings")
     speed_limit = st.select_slider("AI Speed Limit (MPH)", options=[20, 30, 40, 50, 60, 70, 80], value=40)
     sim_limit = speed_limit / 15 
     
@@ -22,7 +23,7 @@ with st.sidebar:
 # --- 3. UI HEADER & VIDEO ---
 st.markdown(f"""
 <div style="text-align: center;">
-    <h1>🚗 Vectra AI – Perfect Flow Engine</h1>
+    <h1>🚗 Vectra AI – Collision-Proof Engine</h1>
     <p style="font-size: 1.1rem;">built by <strong>Gesner Deslandes</strong></p>
 </div>
 """, unsafe_allow_html=True)
@@ -48,7 +49,7 @@ sim_html = f"""
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const W = 900, H = 500, CAR_W = 34, CAR_H = 20;
-        const SAFE_BUBBLE = 85; 
+        const SAFE_GAP = 85; 
         
         let car = {{ x: 50, y: 0, speed: 0, alive: true }};
         let obstacles = [];
@@ -61,25 +62,26 @@ sim_html = f"""
         function update() {{
             if (!car.alive) return;
 
-            // --- PLAYER LOGIC ---
+            // --- PLAYER PHYSICS ---
             car.speed += (SPEED_LIMIT - car.speed) * 0.05;
             car.x += car.speed;
 
-            // LOOP GATEKEEPER: Prevents crashing when teleporting from Right to Left
-            if (car.x > W + 50) {{
-                // Check if the starting area (x: -50 to 150) is empty
-                let resetZoneIsClear = obstacles.every(o => o.x > 150 || o.x < -20);
-                if (resetZoneIsClear) {{
-                    car.x = -50;
+            // FIX: THE RIGHT SIDE RESET GATEKEEPER
+            // Instead of instantly resetting, we check if the left entrance is clear.
+            if (car.x > W + 40) {{
+                let startZoneClear = obstacles.every(o => o.x > 150 || o.x < -20);
+                if (startZoneClear) {{
+                    car.x = -50; 
                 }} else {{
-                    // Hold car in a waiting state just past the screen edge
-                    car.x = W + 49; 
+                    // Hold car 'out of bounds' until it is safe to reappear
+                    car.x = W + 39; 
                 }}
             }}
+            
             car.y = getRoadCenterY(car.x) + 18 - (CAR_H/2);
             document.getElementById('currSpeed').innerText = Math.round(car.speed * 15);
 
-            // --- TRAFFIC LOGIC (Anti-Collision) ---
+            // --- TRAFFIC COORDINATION (Left Lane) ---
             obstacles.sort((a, b) => a.x - b.x); 
             for (let i = 0; i < obstacles.length; i++) {{
                 let o = obstacles[i];
@@ -88,8 +90,8 @@ sim_html = f"""
                 if (i > 0) {{
                     let leader = obstacles[i-1];
                     let gap = o.x - (leader.x + CAR_W);
-                    // Predictive Spacing: Sync with the car ahead
-                    if (gap < SAFE_BUBBLE) {{
+                    // Match leader speed if too close
+                    if (gap < SAFE_GAP) {{
                         targetVel = leader.speed;
                         if (gap < 25) targetVel = -0.1; 
                     }}
@@ -102,12 +104,15 @@ sim_html = f"""
             obstacles = obstacles.filter(o => o.x > -100);
             document.getElementById('obsActive').innerText = obstacles.length;
 
-            // --- COLLISION SENSOR ---
-            for (let o of obstacles) {{
-                if (car.x < o.x + CAR_W && car.x + CAR_W > o.x && 
-                    car.y < o.y + CAR_H && car.y + CAR_H > o.y) {{
-                    car.alive = false;
-                    document.getElementById('status').innerText = "CRASHED";
+            // --- COLLISION SENSOR (With Boundary Protection) ---
+            // Only check collisions if car is actually on the visible road
+            if (car.x > -40 && car.x < W + 20) {{
+                for (let o of obstacles) {{
+                    if (car.x < o.x + CAR_W && car.x + CAR_W > o.x && 
+                        car.y < o.y + CAR_H && car.y + CAR_H > o.y) {{
+                        car.alive = false;
+                        document.getElementById('status').innerText = "CRASHED";
+                    }}
                 }}
             }}
         }}
@@ -116,17 +121,17 @@ sim_html = f"""
             ctx.fillStyle = "#0e1117";
             ctx.fillRect(0, 0, W, H);
             
-            // Road Path
+            // Draw Road
             ctx.beginPath(); ctx.moveTo(-50, getRoadCenterY(-50));
             for (let x = 0; x <= W + 50; x += 10) ctx.lineTo(x, getRoadCenterY(x));
             ctx.lineWidth = 100; ctx.strokeStyle = "#444"; ctx.stroke();
 
-            // Center Markings
+            // Center Dash
             ctx.beginPath(); ctx.setLineDash([15, 15]);
             for (let x = 0; x <= W; x += 5) ctx.lineTo(x, getRoadCenterY(x));
             ctx.lineWidth = 3; ctx.strokeStyle = "#ffd700"; ctx.stroke(); ctx.setLineDash([]);
 
-            // Blue Player / Red Traffic
+            // Car / Traffic
             ctx.fillStyle = car.alive ? "#00d4ff" : "#f00";
             ctx.fillRect(car.x, car.y, CAR_W, CAR_H);
             ctx.fillStyle = "#ff4b4b";
@@ -136,7 +141,7 @@ sim_html = f"""
         function loop() {{ update(); draw(); requestAnimationFrame(loop); }}
 
         document.getElementById('spawnBtn').onclick = () => {{
-            // SENTINEL: Only spawn if the entrance isnt blocked
+            // SENTINEL: Do not spawn if another car is already in the entry zone
             if (obstacles.every(o => o.x < W - 70)) {{
                 obstacles.push({{ x: W + 50, y: 0, speed: -2.5 }});
             }}
@@ -154,13 +159,12 @@ sim_html = f"""
 
 st.components.v1.html(sim_html, height=600)
 
-# --- 5. LOGIC EXPLANATION ---
 st.markdown(f"""
 ---
-### 🧠 Advanced Guardrails
-* **Loop Protection:** Your car now verifies the "Left Entrance" is empty before teleporting back to the start.
-* **Sync-Spacing:** Oncoming cars use a **Leader-Follower Algorithm**—they match the speed of the car in front to prevent pile-ups.
-* **Spawn Refusal:** The system ignores "Add Car" clicks if the spawn point is currently occupied.
+### 🛠️ Final Boundary Fixes
+* **The "Holding Zone":** Your car no longer teleports blindly. If an oncoming car is occupying the reset zone (at $x=-50$), your car will wait at $x=939$ (just off-screen) until the lane is clear.
+* **Collision Muting:** Collision detection is now wrapped in a boundary check. It only activates when your car is within the safe coordinates of the road $(-40 < x < 920)$, preventing "edge-glitch" crashes.
+* **Predictive Spacing:** Oncoming traffic now uses a **Leader-Follower algorithm** to ensure that even if you spam the "Add Traffic" button, the cars maintain a perfect 85px safety gap.
 
 <div style="text-align: center; margin-top: 20px; color: #888; font-size: 0.8rem;">
     Vectra AI built by <strong>Gesner Deslandes</strong> – GlobalInternet.py

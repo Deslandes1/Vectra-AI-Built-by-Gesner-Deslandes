@@ -23,6 +23,17 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# --- Demonstration Video ---
+st.markdown("## 🎥 Vectra AI in Action")
+st.markdown("Watch the autonomous driving system navigate real roads with a human driver monitoring only (hands-off).")
+
+# Use the raw URL to the MP4 file on GitHub
+video_url = "https://raw.githubusercontent.com/Deslandes1/Vectra-AI-Built-by-Gesner-Deslandes/main/AI%20Selfdriving.mp4"
+st.video(video_url)
+
+st.caption("Note: If the video does not play, your browser may not support the MP4 format. Try viewing this app in Chrome or Edge.")
+
+# --- The Simulation Canvas ---
 sim_html = """
 <canvas id="gameCanvas" width="900" height="500" tabindex="0" style="outline: none; cursor: crosshair;"></canvas>
 <div class="info">

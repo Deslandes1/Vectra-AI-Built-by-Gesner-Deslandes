@@ -1,5 +1,4 @@
 import streamlit as st
-import random
 
 st.set_page_config(page_title="Vectra AI – Self-Driving Simulator", layout="wide")
 
@@ -31,7 +30,7 @@ video_url = "https://raw.githubusercontent.com/Deslandes1/Vectra-AI-Built-by-Ges
 st.video(video_url)
 st.caption("Note: If the video does not play, your browser may not support the MP4 format. Try viewing this app in Chrome or Edge.")
 
-# --- The Simulation Canvas (fixed version) ---
+# --- The Simulation Canvas (improved obstacle avoidance) ---
 sim_html = """
 <canvas id="gameCanvas" width="900" height="500" tabindex="0" style="outline: none; cursor: crosshair;"></canvas>
 <div class="info">
@@ -58,12 +57,11 @@ sim_html = """
         const OBSTACLE_SIZE = 30;
         const SENSOR_LENGTH = 120;
         const SENSOR_COUNT = 5;
-        const MAX_SPEED = 4;
-        const TURN_SPEED = 0.1;
+        const MAX_SPEED = 3.5;      // slightly slower for better control
+        const TURN_SPEED = 0.12;
 
-        // Car starts on the left side
         let car = {
-            x: 50,
+            x: 60,
             y: H - 100,
             angle: 0,
             speed: 0,
@@ -79,7 +77,7 @@ sim_html = """
 
         function resetSimulation() {
             car = {
-                x: 50,
+                x: 60,
                 y: H - 100,
                 angle: 0,
                 speed: 0,
@@ -98,11 +96,21 @@ sim_html = """
 
         function randomObstacles() {
             obstacles = [];
+            // Place obstacles only in the right half of the screen, away from car's start
             for (let i = 0; i < 12; i++) {
-                let x = Math.random() * (W - OBSTACLE_SIZE);
-                let y = Math.random() * (H - OBSTACLE_SIZE - 80) + 40;
-                // Avoid placing obstacles directly on the car's starting position
-                if (Math.abs(x - 50) < 60 && Math.abs(y - (H-100)) < 60) continue;
+                let x, y;
+                let valid = false;
+                let attempts = 0;
+                while (!valid && attempts < 30) {
+                    x = Math.random() * (W - OBSTACLE_SIZE - 150) + 150;  // min x = 150
+                    y = Math.random() * (H - OBSTACLE_SIZE - 80) + 40;
+                    // Avoid placing obstacles too close to the car's starting area
+                    let distToCarStart = Math.hypot(x - 60, y - (H-100));
+                    if (distToCarStart > 100) {
+                        valid = true;
+                    }
+                    attempts++;
+                }
                 obstacles.push({ x: x, y: y, w: OBSTACLE_SIZE, h: OBSTACLE_SIZE });
             }
             updateUI();
@@ -146,12 +154,12 @@ sim_html = """
             let threats = sensors.map(d => Math.max(0, (SENSOR_LENGTH - d) / SENSOR_LENGTH));
             let leftThreat = threats[0] + threats[1];
             let rightThreat = threats[3] + threats[4];
-            let steer = (rightThreat - leftThreat) * 0.8;
+            let steer = (rightThreat - leftThreat) * 0.9;
             let frontThreat = threats[2];
-            let speedTarget = MAX_SPEED * (1 - frontThreat * 0.8);
+            let speedTarget = MAX_SPEED * (1 - frontThreat * 0.9);
             car.speed += (speedTarget - car.speed) * 0.1;
             car.angle += steer * TURN_SPEED;
-            car.angle = Math.min(Math.max(car.angle, -Math.PI/3), Math.PI/3);
+            car.angle = Math.min(Math.max(car.angle, -Math.PI/2.5), Math.PI/2.5);
         }
 
         function updateCar() {
@@ -241,8 +249,12 @@ sim_html = """
             const scaleY = canvas.height / rect.height;
             let mouseX = (e.clientX - rect.left) * scaleX;
             let mouseY = (e.clientY - rect.top) * scaleY;
-            obstacles.push({ x: mouseX - OBSTACLE_SIZE/2, y: mouseY - OBSTACLE_SIZE/2, w: OBSTACLE_SIZE, h: OBSTACLE_SIZE });
-            updateUI();
+            // Prevent adding obstacles too close to the car
+            let distToCar = Math.hypot(mouseX - (car.x + CAR_WIDTH/2), mouseY - (car.y + CAR_HEIGHT/2));
+            if (distToCar > 50) {
+                obstacles.push({ x: mouseX - OBSTACLE_SIZE/2, y: mouseY - OBSTACLE_SIZE/2, w: OBSTACLE_SIZE, h: OBSTACLE_SIZE });
+                updateUI();
+            }
         });
 
         document.getElementById('resetBtn').addEventListener('click', () => { resetSimulation(); });
@@ -266,21 +278,16 @@ st.markdown("""
 st.markdown("""
 <div class="sensor-diagram">
     <svg width="100%" height="200" viewBox="0 0 600 150" xmlns="http://www.w3.org/2000/svg">
-        <!-- Car body -->
         <rect x="250" y="100" width="100" height="40" rx="8" fill="#2ecc71" stroke="#1e8449" stroke-width="2"/>
-        <!-- Car windows -->
         <rect x="260" y="108" width="20" height="15" fill="#ecf0f1" rx="3"/>
         <rect x="320" y="108" width="20" height="15" fill="#ecf0f1" rx="3"/>
-        <!-- Wheels -->
         <circle cx="270" cy="140" r="10" fill="#333"/>
         <circle cx="330" cy="140" r="10" fill="#333"/>
-        <!-- Sensors (rays) -->
         <line x1="300" y1="100" x2="300" y2="20" stroke="#00ffcc" stroke-width="2" stroke-dasharray="4,2"/>
         <line x1="280" y1="105" x2="240" y2="30" stroke="#00ffcc" stroke-width="2" stroke-dasharray="4,2"/>
         <line x1="320" y1="105" x2="360" y2="30" stroke="#00ffcc" stroke-width="2" stroke-dasharray="4,2"/>
         <line x1="260" y1="110" x2="210" y2="50" stroke="#00ffcc" stroke-width="2" stroke-dasharray="4,2"/>
         <line x1="340" y1="110" x2="390" y2="50" stroke="#00ffcc" stroke-width="2" stroke-dasharray="4,2"/>
-        <!-- Labels -->
         <text x="290" y="15" fill="#00ffcc" font-size="12">Front</text>
         <text x="220" y="35" fill="#00ffcc" font-size="12">Left</text>
         <text x="370" y="35" fill="#00ffcc" font-size="12">Right</text>
@@ -300,8 +307,8 @@ st.markdown("""
 
 ### 🎮 Controls
 
-- **Click** anywhere on the canvas to add an obstacle.
-- Use the buttons to reset, clear, or add random obstacles.
+- **Click** anywhere on the canvas to add an obstacle (but not too close to the car).
+- Use the buttons to reset, clear, or add random obstacles (placed safely away from the car).
 - The car will try to avoid them automatically.
 
 ### 🚀 Future neural network integration

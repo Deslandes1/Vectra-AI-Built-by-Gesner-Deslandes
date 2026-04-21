@@ -1,6 +1,6 @@
 import streamlit as st
 
-st.set_page_config(page_title="Vectra AI – Real-Car Physics", layout="wide")
+st.set_page_config(page_title="Vectra AI – Lane Integrity", layout="wide")
 
 # --- 1. SIDEBAR ---
 with st.sidebar:
@@ -15,7 +15,7 @@ with st.sidebar:
 # --- 2. HEADER & ORIGINAL VIDEO ---
 st.markdown(f"""
 <div style="text-align: center;">
-    <h1>🚗 Vectra AI – Precision Centering</h1>
+    <h1>🚗 Vectra AI – Precision Lane Anchoring</h1>
     <p style="font-size: 1.1rem;">built by <strong>Gesner Deslandes</strong></p>
 </div>
 """, unsafe_allow_html=True)
@@ -34,12 +34,15 @@ sim_html = f"""
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const W = 900, H = 500, CAR_W = 34, CAR_H = 20;
-        const TARGET_VELOCITY = {sim_limit};
+        
+        // --- LANE OFFSET CONSTANTS ---
+        // Half the car height (10) + Safety Buffer (8) = 18px total offset
+        const LANE_OFFSET = 20; 
         
         let car = {{ x: 50, y: 0, speed: 0 }};
         let obstacles = [];
+        const TARGET_VELOCITY = {sim_limit};
 
-        // ROAD MATH: Returns the exact center of the lane for any X
         function getRoadCenterY(x) {{
             return H/2 + 30 + Math.sin(x / 90) * 45 + Math.sin(x / 200) * 25;
         }}
@@ -51,24 +54,23 @@ sim_html = f"""
         }};
 
         function update() {{
-            // 1. PLAYER MOVEMENT
+            // 1. PLAYER (Blue Car) - Anchored to RIGHT lane
             car.speed += (TARGET_VELOCITY - car.speed) * 0.05;
             car.x += car.speed;
-
-            // CRITICAL FIX: The y-position is now calculated per-frame 
-            // to ensure the car stays glued to the path.
-            car.y = getRoadCenterY(car.x) + 18 - (CAR_H/2);
+            // OFFSET: +LANE_OFFSET pushes the car DOWN into the right lane
+            car.y = getRoadCenterY(car.x) + LANE_OFFSET - (CAR_H/2);
 
             if (car.x > W + 50) {{
                 if (obstacles.every(o => o.x > 150 || o.x < -20)) car.x = -50;
                 else car.x = W + 49;
             }}
 
-            // 2. TRAFFIC MOVEMENT (Real-Life Lane Integrity)
+            // 2. TRAFFIC (Red Cars) - Anchored to LEFT lane
             obstacles.forEach(o => {{
                 o.x -= 2.5;
-                // FIX: Each traffic car centers itself exactly on the left lane ( -18 offset )
-                o.y = getRoadCenterY(o.x) - 18 - (CAR_H/2);
+                // OFFSET: -LANE_OFFSET pulls the car UP into the left lane
+                // This keeps their "back edge" and body entirely off the yellow line
+                o.y = getRoadCenterY(o.x) - LANE_OFFSET - (CAR_H/2);
             }});
             obstacles = obstacles.filter(o => o.x > -100);
         }}
@@ -77,23 +79,23 @@ sim_html = f"""
             ctx.fillStyle = "#0e1117";
             ctx.fillRect(0, 0, W, H);
             
-            // Draw Road
+            // Draw Road Base
             ctx.beginPath(); 
             ctx.moveTo(-50, getRoadCenterY(-50));
             for (let x = 0; x <= W + 50; x += 5) ctx.lineTo(x, getRoadCenterY(x));
             ctx.lineWidth = 100; ctx.strokeStyle = "#444"; ctx.stroke();
 
-            // Center Dash
+            // Draw Yellow Line
             ctx.beginPath(); ctx.setLineDash([15, 15]);
             for (let x = 0; x <= W; x += 5) ctx.lineTo(x, getRoadCenterY(x));
             ctx.lineWidth = 3; ctx.strokeStyle = "#ffd700"; ctx.stroke(); 
             ctx.setLineDash([]);
 
-            // Vehicles
-            ctx.fillStyle = "#00d4ff"; // Your Car
+            // Draw Vehicles
+            ctx.fillStyle = "#00d4ff"; // Blue
             ctx.fillRect(car.x, car.y, CAR_W, CAR_H);
             
-            ctx.fillStyle = "#ff4b4b"; // Traffic
+            ctx.fillStyle = "#ff4b4b"; // Red
             for (let o of obstacles) ctx.fillRect(o.x, o.y, CAR_W, CAR_H);
         }}
 

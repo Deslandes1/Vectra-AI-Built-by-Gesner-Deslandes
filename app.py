@@ -18,8 +18,8 @@ st.markdown("""
 <div style="text-align: center;">
     <h1>🚗 Vectra AI</h1>
     <p style="font-size: 1.1rem;">built by <strong>Gesner Deslandes</strong></p>
-    <p>Self‑Driving Car Simulator – rule‑based AI with 5 sensors and lane keeping</p>
-    <p><strong>Click on the canvas to add obstacles. Watch the AI navigate.</strong></p>
+    <p>Self‑Driving Car Simulator – two‑lane road, right‑lane driving, obstacle avoidance</p>
+    <p><strong>Click on the canvas to add other cars (obstacles) on the left lane. Watch your car avoid them.</strong></p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -30,18 +30,18 @@ video_url = "https://raw.githubusercontent.com/Deslandes1/Vectra-AI-Built-by-Ges
 st.video(video_url)
 st.caption("Note: If the video does not play, your browser may not support the MP4 format. Try viewing this app in Chrome or Edge.")
 
-# --- The Simulation Canvas (lane‑keeping + obstacle avoidance) ---
+# --- The Simulation Canvas (two‑lane road, right‑lane car, left‑lane obstacles) ---
 sim_html = """
 <canvas id="gameCanvas" width="900" height="500" tabindex="0" style="outline: none; cursor: crosshair;"></canvas>
 <div class="info">
     🧠 AI Status: <span id="status">Driving</span> &nbsp;|&nbsp;
-    🚧 Obstacles: <span id="obstacleCount">0</span> &nbsp;|&nbsp;
+    🚗 Other cars: <span id="obstacleCount">0</span> &nbsp;|&nbsp;
     💥 Collisions: <span id="collisionCount">0</span>
 </div>
 <div style="text-align: center; margin-top: 10px;">
     <button id="resetBtn">🔄 Reset Simulator</button>
-    <button id="clearObstaclesBtn">🗑️ Clear Obstacles</button>
-    <button id="randomObstaclesBtn">🎲 Random Obstacles</button>
+    <button id="clearObstaclesBtn">🗑️ Clear All Other Cars</button>
+    <button id="randomObstaclesBtn">🎲 Random Other Cars (left lane)</button>
 </div>
 
 <script>
@@ -54,13 +54,14 @@ sim_html = """
 
         const W = 900, H = 500;
         const CAR_WIDTH = 30, CAR_HEIGHT = 20;
-        const OBSTACLE_SIZE = 30;
+        const OBSTACLE_SIZE = 30;   // other cars are same size
         const SENSOR_LENGTH = 130;
         const SENSOR_COUNT = 5;
         const MAX_SPEED = 3.8;
         const TURN_SPEED = 0.12;
-        const LANE_KEEP_STRENGTH = 0.6;  // how strongly to return to straight angle
+        const LANE_KEEP_STRENGTH = 0.7;
 
+        // Car starts in the right lane (y ~ 80% of height)
         let car = {
             x: 60,
             y: H - 100,
@@ -69,6 +70,7 @@ sim_html = """
             alive: true,
             collisions: 0
         };
+        // Obstacles (other cars) should be placed in the left lane (y roughly between 100 and 250)
         let obstacles = [];
 
         function updateUI() {
@@ -97,16 +99,21 @@ sim_html = """
 
         function randomObstacles() {
             obstacles = [];
-            for (let i = 0; i < 12; i++) {
+            // Place obstacles only in the left lane (y between 80 and 250)
+            for (let i = 0; i < 10; i++) {
                 let x, y;
                 let valid = false;
                 let attempts = 0;
                 while (!valid && attempts < 30) {
                     x = Math.random() * (W - OBSTACLE_SIZE - 100) + 100;
-                    y = Math.random() * (H - OBSTACLE_SIZE - 80) + 40;
-                    let distToCarStart = Math.hypot(x - 60, y - (H-100));
-                    if (distToCarStart > 100) {
-                        valid = true;
+                    y = Math.random() * (H - OBSTACLE_SIZE - 250) + 80;
+                    // Ensure y is within left lane (upper half)
+                    if (y < 250 && y > 60) {
+                        // Also avoid placing obstacles too close to the car's starting area
+                        let distToCarStart = Math.hypot(x - 60, y - (H-100));
+                        if (distToCarStart > 100) {
+                            valid = true;
+                        }
                     }
                     attempts++;
                 }
@@ -153,13 +160,9 @@ sim_html = """
             let threats = sensors.map(d => Math.max(0, (SENSOR_LENGTH - d) / SENSOR_LENGTH));
             let leftThreat = threats[0] + threats[1];
             let rightThreat = threats[3] + threats[4];
-            // Obstacle avoidance steering
             let avoidSteer = (rightThreat - leftThreat) * 0.9;
-            // Lane keeping: return to angle 0 (straight)
             let laneSteer = -car.angle * LANE_KEEP_STRENGTH;
-            // Combine: when no threat, lane keeping dominates; when threat, avoid overrides
             let totalSteer = avoidSteer + laneSteer;
-            // Limit maximum steering
             totalSteer = Math.min(Math.max(totalSteer, -0.5), 0.5);
             
             let frontThreat = threats[2];
@@ -186,7 +189,7 @@ sim_html = """
                     car.y < obs.y + obs.h && car.y + CAR_HEIGHT > obs.y) {
                     car.alive = false;
                     car.collisions++;
-                    statusSpan.innerText = "Crashed into obstacle!";
+                    statusSpan.innerText = "Collision with other car!";
                     updateUI();
                     return;
                 }
@@ -195,35 +198,46 @@ sim_html = """
 
         function draw() {
             ctx.clearRect(0, 0, W, H);
+            // Road background
             ctx.fillStyle = "#2c3e50";
             ctx.fillRect(0, 0, W, H);
-            // Draw lane center line (dashed)
+            
+            // Draw lane separator (yellow dashed line)
+            let laneSeparatorY = H / 2 + 20;
             ctx.beginPath();
             ctx.strokeStyle = "#ffcc00";
-            ctx.lineWidth = 2;
-            ctx.setLineDash([15, 20]);
-            let laneY = H - 100;
-            ctx.moveTo(0, laneY);
-            ctx.lineTo(W, laneY);
+            ctx.lineWidth = 4;
+            ctx.setLineDash([20, 30]);
+            ctx.moveTo(0, laneSeparatorY);
+            ctx.lineTo(W, laneSeparatorY);
             ctx.stroke();
             ctx.setLineDash([]);
-            // Road lines
-            ctx.strokeStyle = "#ffcc00";
-            ctx.lineWidth = 4;
-            for (let y = 0; y < H; y += 50) {
-                if (Math.abs(y - laneY) < 30) continue; // avoid clashing with lane line
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(W, y);
-                ctx.stroke();
-            }
+            
+            // Road edge lines
+            ctx.beginPath();
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 2;
+            ctx.setLineDash([]);
+            ctx.moveTo(0, 30);
+            ctx.lineTo(W, 30);
+            ctx.stroke();
+            ctx.moveTo(0, H-30);
+            ctx.lineTo(W, H-30);
+            ctx.stroke();
+            
+            // Draw other cars (obstacles) as red cars
             for (let obs of obstacles) {
                 ctx.fillStyle = "#e74c3c";
                 ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
                 ctx.fillStyle = "#c0392b";
                 ctx.fillRect(obs.x+5, obs.y+5, obs.w-10, obs.h-10);
+                // headlights
+                ctx.fillStyle = "#f1c40f";
+                ctx.fillRect(obs.x+obs.w-5, obs.y+5, 5, 5);
+                ctx.fillRect(obs.x+obs.w-5, obs.y+obs.h-10, 5, 5);
             }
-            // Sensors
+            
+            // Draw sensors (rays)
             ctx.beginPath();
             ctx.strokeStyle = "#00ffcc";
             ctx.lineWidth = 1;
@@ -238,7 +252,8 @@ sim_html = """
                 ctx.lineTo(endX, endY);
                 ctx.stroke();
             }
-            // Car
+            
+            // Draw our car (green)
             ctx.fillStyle = "#2ecc71";
             ctx.fillRect(car.x, car.y, CAR_WIDTH, CAR_HEIGHT);
             ctx.fillStyle = "#ecf0f1";
@@ -268,10 +283,13 @@ sim_html = """
             const scaleY = canvas.height / rect.height;
             let mouseX = (e.clientX - rect.left) * scaleX;
             let mouseY = (e.clientY - rect.top) * scaleY;
-            let distToCar = Math.hypot(mouseX - (car.x + CAR_WIDTH/2), mouseY - (car.y + CAR_HEIGHT/2));
-            if (distToCar > 50) {
-                obstacles.push({ x: mouseX - OBSTACLE_SIZE/2, y: mouseY - OBSTACLE_SIZE/2, w: OBSTACLE_SIZE, h: OBSTACLE_SIZE });
-                updateUI();
+            // Only allow placing obstacles in the left lane (y between 60 and 250)
+            if (mouseY > 60 && mouseY < 250) {
+                let distToCar = Math.hypot(mouseX - (car.x + CAR_WIDTH/2), mouseY - (car.y + CAR_HEIGHT/2));
+                if (distToCar > 60) {
+                    obstacles.push({ x: mouseX - OBSTACLE_SIZE/2, y: mouseY - OBSTACLE_SIZE/2, w: OBSTACLE_SIZE, h: OBSTACLE_SIZE });
+                    updateUI();
+                }
             }
         });
 
@@ -289,45 +307,20 @@ st.components.v1.html(sim_html, height=560, scrolling=False)
 
 st.markdown("""
 ---
-### 🧠 How Vectra AI works
-""")
+### 🧠 How Vectra AI works (two‑lane version)
 
-# --- Illustrative diagram (SVG) ---
-st.markdown("""
-<div class="sensor-diagram">
-    <svg width="100%" height="200" viewBox="0 0 600 150" xmlns="http://www.w3.org/2000/svg">
-        <rect x="250" y="100" width="100" height="40" rx="8" fill="#2ecc71" stroke="#1e8449" stroke-width="2"/>
-        <rect x="260" y="108" width="20" height="15" fill="#ecf0f1" rx="3"/>
-        <rect x="320" y="108" width="20" height="15" fill="#ecf0f1" rx="3"/>
-        <circle cx="270" cy="140" r="10" fill="#333"/>
-        <circle cx="330" cy="140" r="10" fill="#333"/>
-        <line x1="300" y1="100" x2="300" y2="20" stroke="#00ffcc" stroke-width="2" stroke-dasharray="4,2"/>
-        <line x1="280" y1="105" x2="240" y2="30" stroke="#00ffcc" stroke-width="2" stroke-dasharray="4,2"/>
-        <line x1="320" y1="105" x2="360" y2="30" stroke="#00ffcc" stroke-width="2" stroke-dasharray="4,2"/>
-        <line x1="260" y1="110" x2="210" y2="50" stroke="#00ffcc" stroke-width="2" stroke-dasharray="4,2"/>
-        <line x1="340" y1="110" x2="390" y2="50" stroke="#00ffcc" stroke-width="2" stroke-dasharray="4,2"/>
-        <text x="290" y="15" fill="#00ffcc" font-size="12">Front</text>
-        <text x="220" y="35" fill="#00ffcc" font-size="12">Left</text>
-        <text x="370" y="35" fill="#00ffcc" font-size="12">Right</text>
-        <text x="180" y="60" fill="#00ffcc" font-size="12">Far left</text>
-        <text x="410" y="60" fill="#00ffcc" font-size="12">Far right</text>
-    </svg>
-    <p><em>Diagram: The car uses 5 sensors (rays) to detect obstacles. The AI steers away from the closest one and returns to straight lane.</em></p>
-</div>
-""", unsafe_allow_html=True)
-
-st.markdown("""
-- The car has **5 sensors** (rays) pointing forward at different angles.
-- Each sensor measures the distance to the nearest obstacle or screen edge.
-- The AI **combines obstacle avoidance** (steer away from the closest obstacle) with **lane keeping** (return to straight angle).
+- The road has two lanes: **left lane (top)** for other cars, **right lane (bottom)** for your car.
+- Your car is green, other cars are red.
+- The car uses **5 sensors** to detect obstacles (other cars or road edges).
+- The AI **combines obstacle avoidance** (steer away from the closest red car) with **lane keeping** (stay straight and centered in the right lane).
 - Speed is reduced when the front sensor is very close to an obstacle.
-- This creates natural driving behavior: stay straight, swerve around obstacles, then straighten again.
+- The car will steer around other cars and then return to its lane.
 
 ### 🎮 Controls
 
-- **Click** anywhere on the canvas to add an obstacle (but not too close to the car).
-- Use the buttons to reset, clear, or add random obstacles (placed safely away from the car).
-- The car will try to avoid them automatically while staying on the road lane.
+- **Click** on the left lane (upper half) to add another car (obstacle).
+- Use the buttons to reset, clear all other cars, or add random other cars.
+- Your car will automatically avoid them while staying on the right side of the road.
 
 ### 🚀 Future neural network integration
 

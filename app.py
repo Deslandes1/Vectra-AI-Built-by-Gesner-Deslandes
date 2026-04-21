@@ -18,8 +18,8 @@ st.markdown("""
 <div style="text-align: center;">
     <h1>🚗 Vectra AI – Dust Road</h1>
     <p style="font-size: 1.1rem;">built by <strong>Gesner Deslandes</strong></p>
-    <p>Self‑Driving Car on a winding dirt road – avoids obstacles while staying perfectly on the path</p>
-    <p><strong>Click "Add Random Cars" – the AI will steer around them without leaving the road.</strong></p>
+    <p>Self‑Driving Car on a winding dirt road – stays on the right side, avoids left‑side obstacles</p>
+    <p><strong>Click "Add Random Cars" – other cars appear on the left. Your car avoids them while staying on the right.</strong></p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -30,7 +30,7 @@ video_url = "https://raw.githubusercontent.com/Deslandes1/Vectra-AI-Built-by-Ges
 st.video(video_url)
 st.caption("Note: If the video does not play, your browser may not support the MP4 format. Try viewing this app in Chrome or Edge.")
 
-# --- The Simulation Canvas (precision road‑following + smooth avoidance) ---
+# --- The Simulation Canvas (right‑lane only, left‑side obstacles) ---
 sim_html = """
 <canvas id="gameCanvas" width="900" height="500" tabindex="0" style="outline: none; cursor: crosshair;"></canvas>
 <div class="info">
@@ -41,7 +41,7 @@ sim_html = """
 <div style="text-align: center; margin-top: 10px;">
     <button id="resetBtn">🔄 Reset Drive</button>
     <button id="clearObstaclesBtn">🗑️ Clear Other Cars</button>
-    <button id="randomObstaclesBtn">🎲 Add Random Cars</button>
+    <button id="randomObstaclesBtn">🎲 Add Random Cars (left side)</button>
 </div>
 
 <script>
@@ -59,9 +59,10 @@ sim_html = """
         const SENSOR_ANGLES = [-0.9, -0.5, 0, 0.5, 0.9];
         const MAX_SPEED = 3.2;
         const TURN_SPEED = 0.16;
-        const PATH_LOOKAHEAD = 25;       // pixels ahead for road following
-        const AVOID_STRENGTH = 1.3;
-        const ROAD_PULL_STRENGTH = 0.12;
+        const PATH_LOOKAHEAD = 25;
+        const AVOID_STRENGTH = 1.2;
+        const RIGHT_LANE_OFFSET = 18;      // pixels to the right of road center
+        const ROAD_PULL_STRENGTH = 0.15;
 
         let car = {
             x: 50,
@@ -73,27 +74,32 @@ sim_html = """
         };
         let obstacles = [];
 
-        // Winding road center (smooth sine wave)
+        // Road center (winding)
         function getRoadCenterY(x) {
             let y = H/2 + 30 + Math.sin(x / 90) * 45 + Math.sin(x / 200) * 25;
             return Math.min(Math.max(y, 70), H - 70);
         }
 
-        // Strict on‑road check (distance to road center < 30px)
-        function isOnRoad(x, y) {
-            let roadY = getRoadCenterY(x);
-            return Math.abs(y - roadY) < 30;
+        // Right lane target (offset from center)
+        function getRightLaneY(x) {
+            let centerY = getRoadCenterY(x);
+            return centerY + RIGHT_LANE_OFFSET;
+        }
+
+        // Check if car is on the right side (not crossing center line)
+        function isOnRightSide(carCenterY, x) {
+            let centerY = getRoadCenterY(x);
+            return carCenterY > centerY - 5;   // car center must be to the right of center
         }
 
         function drawDustRoad() {
-            // Dirt background
             ctx.fillStyle = "#c9a87b";
             ctx.fillRect(0, 0, W, H);
             ctx.fillStyle = "#b88a5a";
             for (let i = 0; i < 400; i++) {
                 ctx.fillRect(Math.random() * W, Math.random() * H, 2, 2);
             }
-            // Road path
+            // Road path (brown band)
             ctx.beginPath();
             ctx.moveTo(0, getRoadCenterY(0));
             for (let x = 0; x <= W; x += 20) {
@@ -102,7 +108,7 @@ sim_html = """
             ctx.lineWidth = 70;
             ctx.strokeStyle = "#a56b3a";
             ctx.stroke();
-            // Center guideline
+            // Center guideline (dashed)
             ctx.beginPath();
             for (let x = 0; x <= W; x += 40) {
                 let y = getRoadCenterY(x);
@@ -114,13 +120,23 @@ sim_html = """
             ctx.setLineDash([15, 25]);
             ctx.stroke();
             ctx.setLineDash([]);
+            // Right lane marker (small dots)
+            ctx.beginPath();
+            ctx.strokeStyle = "#ffccaa";
+            ctx.lineWidth = 2;
+            for (let x = 0; x <= W; x += 30) {
+                let y = getRightLaneY(x);
+                ctx.moveTo(x, y);
+                ctx.lineTo(x+10, y);
+                ctx.stroke();
+            }
             // Tire tracks
             ctx.beginPath();
             ctx.strokeStyle = "#7a4a2a";
             ctx.lineWidth = 2;
             for (let i = 0; i < 100; i++) {
                 let x = Math.random() * W;
-                let y = getRoadCenterY(x) + (Math.random() - 0.5) * 25;
+                let y = getRightLaneY(x) + (Math.random() - 0.5) * 15;
                 ctx.moveTo(x, y);
                 ctx.lineTo(x + 10, y + (Math.random() - 0.5) * 10);
                 ctx.stroke();
@@ -130,16 +146,15 @@ sim_html = """
         function updateCar() {
             if (!car.alive) return;
             
-            // 1. Path following (look ahead)
+            // Path following: aim for right lane ahead
             let lookAheadX = car.x + PATH_LOOKAHEAD;
-            let targetY = getRoadCenterY(lookAheadX);
+            let targetY = getRightLaneY(lookAheadX);
             let dyTarget = targetY - (car.y + CAR_HEIGHT/2);
             let desiredAngle = Math.atan2(dyTarget, PATH_LOOKAHEAD);
             desiredAngle = Math.min(Math.max(desiredAngle, -0.5), 0.5);
             
-            // 2. Obstacle detection via 5 rays
+            // Sensor rays
             let threats = [0, 0, 0, 0, 0];
-            let minDist = SENSOR_LENGTH;
             for (let i = 0; i < SENSOR_ANGLES.length; i++) {
                 let rad = car.angle + SENSOR_ANGLES[i];
                 let dx = Math.cos(rad);
@@ -158,7 +173,6 @@ sim_html = """
                         }
                     }
                 }
-                // edge distance
                 let edgeDist = SENSOR_LENGTH;
                 if (dx > 0) edgeDist = Math.min(edgeDist, (W - x) / dx);
                 if (dx < 0) edgeDist = Math.min(edgeDist, -x / dx);
@@ -166,24 +180,24 @@ sim_html = """
                 if (dy < 0) edgeDist = Math.min(edgeDist, -y / dy);
                 distance = Math.min(distance, edgeDist);
                 threats[i] = Math.max(0, (SENSOR_LENGTH - distance) / SENSOR_LENGTH);
-                if (distance < minDist) minDist = distance;
             }
             let leftThreat = threats[0] + threats[1];
             let rightThreat = threats[3] + threats[4];
+            // Obstacles are on the left, so we steer right (avoid) by pushing away from left threat
             let avoidSteer = (rightThreat - leftThreat) * AVOID_STRENGTH;
             
-            // 3. Road pull (keep on center)
+            // Road pull: keep car on right lane
             let currentYcenter = car.y + CAR_HEIGHT/2;
-            let roadY = getRoadCenterY(car.x);
-            let yDiff = roadY - currentYcenter;
-            let roadPull = yDiff * ROAD_PULL_STRENGTH;
+            let targetLaneY = getRightLaneY(car.x);
+            let laneDiff = targetLaneY - currentYcenter;
+            let roadPull = laneDiff * ROAD_PULL_STRENGTH;
             roadPull = Math.min(Math.max(roadPull, -0.2), 0.2);
             
-            // Combine steering
+            // Combine steering (path following + avoidance + lane keeping)
             let totalSteer = desiredAngle * 0.6 + avoidSteer + roadPull;
-            totalSteer = Math.min(Math.max(totalSteer, -0.6), 0.6);
+            totalSteer = Math.min(Math.max(totalSteer, -0.5), 0.5);
             
-            // Speed control
+            // Speed reduction if obstacle ahead
             let frontThreat = threats[2];
             let speedTarget = MAX_SPEED * (1 - frontThreat * 0.9);
             car.speed += (speedTarget - car.speed) * 0.1;
@@ -196,30 +210,27 @@ sim_html = """
             car.x += dx;
             car.y += dy;
             
-            // Hard road boundary enforcement (prevent leaving the road)
-            if (!isOnRoad(car.x + CAR_WIDTH/2, car.y + CAR_HEIGHT/2)) {
-                let targetY = getRoadCenterY(car.x);
-                let correction = (targetY - (car.y + CAR_HEIGHT/2)) * 0.3;
-                car.y += correction;
+            // Enforce right‑side only: prevent car from crossing center line
+            let carCenterY = car.y + CAR_HEIGHT/2;
+            let centerY = getRoadCenterY(car.x);
+            if (carCenterY < centerY - 2) {   // too far left
+                car.y = centerY - 2 - CAR_HEIGHT/2;
                 car.speed *= 0.98;
-                if (Math.abs(correction) > 3) {
-                    car.angle += correction * 0.02;
-                }
+                car.angle += 0.05;  // steer right gently
             }
             
-            // Final safety boundaries
+            // Boundary check (keep on screen)
             if (car.x < 5 || car.x + CAR_WIDTH > W - 5 || car.y < 25 || car.y + CAR_HEIGHT > H - 25) {
                 car.alive = false;
                 statusSpan.innerText = "Went off the road!";
                 return;
             }
             
-            // Collision detection (with extra margin)
+            // Collision detection (with safety margin)
             for (let i = 0; i < obstacles.length; i++) {
                 let obs = obstacles[i];
-                // add a small safety margin (2px)
-                if (car.x + 2 < obs.x + obs.w && car.x + CAR_WIDTH - 2 > obs.x &&
-                    car.y + 2 < obs.y + obs.h && car.y + CAR_HEIGHT - 2 > obs.y) {
+                if (car.x + 3 < obs.x + obs.w && car.x + CAR_WIDTH - 3 > obs.x &&
+                    car.y + 3 < obs.y + obs.h && car.y + CAR_HEIGHT - 3 > obs.y) {
                     car.alive = false;
                     car.collisions++;
                     statusSpan.innerText = "Crashed into another car!";
@@ -231,7 +242,7 @@ sim_html = """
 
         function draw() {
             drawDustRoad();
-            // Draw obstacles (other cars)
+            // Draw obstacles (other cars) on the left side
             for (let obs of obstacles) {
                 ctx.fillStyle = "#8b5a2b";
                 ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
@@ -241,7 +252,7 @@ sim_html = """
                 ctx.fillRect(obs.x+obs.w-6, obs.y+4, 4, 5);
                 ctx.fillRect(obs.x+obs.w-6, obs.y+obs.h-9, 4, 5);
             }
-            // Draw sensors
+            // Sensors
             ctx.beginPath();
             ctx.strokeStyle = "#ffaa44";
             ctx.lineWidth = 1;
@@ -256,7 +267,7 @@ sim_html = """
                 ctx.lineTo(endX, endY);
                 ctx.stroke();
             }
-            // Draw our car
+            // Our car (green)
             ctx.fillStyle = "#6a994e";
             ctx.fillRect(car.x, car.y, CAR_WIDTH, CAR_HEIGHT);
             ctx.fillStyle = "#bcbcbc";
@@ -286,7 +297,7 @@ sim_html = """
         function resetSimulation() {
             car = {
                 x: 50,
-                y: getRoadCenterY(50) - CAR_HEIGHT/2,
+                y: getRightLaneY(50) - CAR_HEIGHT/2,
                 angle: 0,
                 speed: 0,
                 alive: true,
@@ -303,14 +314,14 @@ sim_html = """
         }
 
         function addRandomObstacles() {
-            // Add 2‑4 obstacles at varying distances (100‑250px ahead)
+            // Place 2‑4 obstacles on the LEFT side of the road (center - offset)
             let count = Math.floor(Math.random() * 3) + 2;
             for (let i = 0; i < count; i++) {
                 let x = car.x + Math.random() * 150 + 100;
-                let y = getRoadCenterY(x) - OBSTACLE_SIZE/2 + (Math.random() - 0.5) * 30;
+                let centerY = getRoadCenterY(x);
+                let y = centerY - OBSTACLE_SIZE/2 - (Math.random() * 20 + 10); // left side
                 y = Math.min(Math.max(y, 40), H - OBSTACLE_SIZE - 40);
-                // Prevent placing obstacles too close to the car
-                if (Math.abs(x - car.x) > 50) {
+                if (Math.abs(x - car.x) > 60) {
                     obstacles.push({ x: x, y: y, w: OBSTACLE_SIZE, h: OBSTACLE_SIZE });
                 }
             }
@@ -324,8 +335,9 @@ sim_html = """
             const scaleY = canvas.height / rect.height;
             let mouseX = (e.clientX - rect.left) * scaleX;
             let mouseY = (e.clientY - rect.top) * scaleY;
-            let roadY = getRoadCenterY(mouseX);
-            if (Math.abs(mouseY - roadY) < 45 && mouseX > car.x + 60) {
+            let centerY = getRoadCenterY(mouseX);
+            // Only allow placing on left side (y < centerY - 5)
+            if (mouseY < centerY - 5 && mouseX > car.x + 60) {
                 obstacles.push({ x: mouseX - OBSTACLE_SIZE/2, y: mouseY - OBSTACLE_SIZE/2, w: OBSTACLE_SIZE, h: OBSTACLE_SIZE });
                 updateUI();
             }
@@ -345,21 +357,21 @@ st.components.v1.html(sim_html, height=560, scrolling=False)
 
 st.markdown("""
 ---
-### 🧠 How the car stays on the road and avoids obstacles
+### 🧠 How the car stays on the right and avoids left‑side obstacles
 
-- **Precise path following** – the car looks 25 pixels ahead and steers toward the road center.
-- **Five wide‑angle sensors** detect obstacles left, center, and right.
-- **Avoidance steering** is added to the path‑following command, so the car swerves only when needed.
-- **Road pull** gently corrects any drift, keeping the car within 30 pixels of the road center.
-- **Speed reduction** when an obstacle is near gives the AI more reaction time.
-- **Collision detection includes a safety margin** to prevent touching other cars.
+- **Right lane following** – the car targets a path 18 pixels to the right of the road center.
+- **Obstacles are placed on the left side** of the road (center minus offset).
+- **Five sensors** detect obstacles; the car steers **right** (away from left threat) and slows down.
+- A **lane‑keeping force** constantly pulls the car back to the right lane.
+- A **hard barrier** prevents the car from crossing the road center to the left.
+- **Collision detection includes a safety margin** to avoid touching other cars.
 
 ### 🎮 Controls
 
-- **Add Random Cars** – places 2‑4 other cars ahead on the road.
+- **Add Random Cars** – places 2‑4 other cars on the left side ahead.
 - **Clear Other Cars** – removes all obstacles.
 - **Reset Drive** – restarts the simulation.
-- **Click on the road** (ahead of your car) to add a single car.
+- **Click on the left side of the road** to add a single car (must be ahead of your car).
 
 ### 🚀 Future neural network integration
 

@@ -31,7 +31,7 @@ video_url = "https://raw.githubusercontent.com/Deslandes1/Vectra-AI-Built-by-Ges
 st.video(video_url)
 st.caption("Note: If the video does not play, your browser may not support the MP4 format. Try viewing this app in Chrome or Edge.")
 
-# --- The Simulation Canvas ---
+# --- The Simulation Canvas (fixed version) ---
 sim_html = """
 <canvas id="gameCanvas" width="900" height="500" tabindex="0" style="outline: none; cursor: crosshair;"></canvas>
 <div class="info">
@@ -61,8 +61,9 @@ sim_html = """
         const MAX_SPEED = 4;
         const TURN_SPEED = 0.1;
 
+        // Car starts on the left side
         let car = {
-            x: W/2,
+            x: 50,
             y: H - 100,
             angle: 0,
             speed: 0,
@@ -78,7 +79,7 @@ sim_html = """
 
         function resetSimulation() {
             car = {
-                x: W/2,
+                x: 50,
                 y: H - 100,
                 angle: 0,
                 speed: 0,
@@ -97,9 +98,11 @@ sim_html = """
 
         function randomObstacles() {
             obstacles = [];
-            for (let i = 0; i < 8; i++) {
+            for (let i = 0; i < 12; i++) {
                 let x = Math.random() * (W - OBSTACLE_SIZE);
-                let y = Math.random() * (H - OBSTACLE_SIZE - 50) + 50;
+                let y = Math.random() * (H - OBSTACLE_SIZE - 80) + 40;
+                // Avoid placing obstacles directly on the car's starting position
+                if (Math.abs(x - 50) < 60 && Math.abs(y - (H-100)) < 60) continue;
                 obstacles.push({ x: x, y: y, w: OBSTACLE_SIZE, h: OBSTACLE_SIZE });
             }
             updateUI();

@@ -1,11 +1,17 @@
 import streamlit as st
 
-st.set_page_config(page_title="Vectra AI – Hard Lane Boundaries", layout="wide")
+st.set_page_config(page_title="Vectra AI – Perfect Flow", layout="wide")
 
-# --- 1. SIDEBAR & UPLOAD ---
+# --- 1. SIDEBAR: SPEED, ROADMAP, & UPLOAD ---
 with st.sidebar:
     st.header("🚦 Traffic Control")
-    speed_limit = st.select_slider("AI Speed Limit (MPH)", options=[20, 30, 40, 50, 60, 70, 80], value=40)
+    # This slider now controls the physics engine directly
+    speed_limit = st.select_slider(
+        "AI Speed Limit (MPH)", 
+        options=[20, 30, 40, 50, 60, 70, 80], 
+        value=40
+    )
+    # Math: Convert MPH to "pixels per frame" for the JS engine
     sim_limit = speed_limit / 15 
     
     st.divider()
@@ -19,11 +25,12 @@ with st.sidebar:
 # --- 2. UI HEADER & ORIGINAL VIDEO ---
 st.markdown(f"""
 <div style="text-align: center;">
-    <h1>🚗 Vectra AI – Zero-Tolerance Lane Logic</h1>
+    <h1>🚗 Vectra AI – Zero-Clipping Lane Logic</h1>
     <p style="font-size: 1.1rem;">built by <strong>Gesner Deslandes</strong></p>
 </div>
 """, unsafe_allow_html=True)
 
+# Keeping your original video
 st.video("https://raw.githubusercontent.com/Deslandes1/Vectra-AI-Built-by-Gesner-Deslandes/main/AI%20Selfdriving.mp4")
 
 # --- 3. SIMULATION ENGINE ---
@@ -34,6 +41,10 @@ sim_html = f"""
         🎲 Add Oncoming Car
     </button>
 </div>
+<div style="text-align: center; font-family: monospace; font-size: 1.2rem; margin-top: 10px; color: white;">
+    🧠 Target: <span style="color: #00ff00;">{speed_limit} MPH</span> &nbsp;|&nbsp; 
+    ⏱️ Real-time: <span id="currSpeedDisplay">0</span> MPH
+</div>
 
 <script>
     (function() {{
@@ -41,18 +52,14 @@ sim_html = f"""
         const ctx = canvas.getContext('2d');
         const W = 900, H = 500, CAR_W = 34, CAR_H = 20;
         
-        // --- HARD BOUNDARY LOGIC ---
-        // We increase the offset to 28px. 
-        // Since the car is 20px tall, this leaves an 18px gap from the center.
-        // Even in sharp curves, the 10px half-width of the car won't reach the line.
-        const LANE_WIDTH_OFFSET = 28; 
+        // --- PHYSICS LINK ---
+        const TARGET_VELOCITY = {sim_limit}; 
+        const LANE_OFFSET = 28; // Prevents yellow line clipping
         
         let car = {{ x: 50, y: 0, speed: 0 }};
         let obstacles = [];
-        const TARGET_VELOCITY = {sim_limit};
 
         function getRoadCenterY(x) {{
-            // The mathematical "Yellow Line" path
             return H/2 + 30 + Math.sin(x / 90) * 45 + Math.sin(x / 200) * 25;
         }}
 
@@ -63,22 +70,30 @@ sim_html = f"""
         }};
 
         function update() {{
-            // 1. PLAYER (Blue Car) - Pushed deep into the RIGHT lane
-            car.speed += (TARGET_VELOCITY - car.speed) * 0.05;
+            // 1. DYNAMIC SPEED (Blue Car)
+            // car.speed gradually moves toward TARGET_VELOCITY for smooth acceleration
+            let speedDiff = TARGET_VELOCITY - car.speed;
+            car.speed += speedDiff * 0.05; 
             car.x += car.speed;
-            car.y = getRoadCenterY(car.x) + LANE_WIDTH_OFFSET - (CAR_H/2);
+            
+            // Lock to Right Lane
+            car.y = getRoadCenterY(car.x) + LANE_OFFSET - (CAR_H/2);
 
             if (car.x > W + 50) {{
                 let resetClear = obstacles.every(o => o.x > 150 || o.x < -20);
                 if (resetClear) car.x = -50;
                 else car.x = W + 49;
             }}
+            
+            // Update MPH display
+            document.getElementById('currSpeedDisplay').innerText = Math.round(car.speed * 15);
 
-            // 2. TRAFFIC (Red Cars) - Pushed deep into the LEFT lane
+            // 2. TRAFFIC MOVEMENT (Red Cars)
             obstacles.forEach(o => {{
-                o.x -= 2.5;
-                // Subtracting the offset moves the red cars UP, away from the yellow line.
-                o.y = getRoadCenterY(o.x) - LANE_WIDTH_OFFSET - (CAR_H/2);
+                // Oncoming cars move at a constant safe speed
+                o.x -= 2.5; 
+                // Lock to Left Lane (Negative Offset)
+                o.y = getRoadCenterY(o.x) - LANE_OFFSET - (CAR_H/2);
             }});
             obstacles = obstacles.filter(o => o.x > -100);
         }}
@@ -87,20 +102,16 @@ sim_html = f"""
             ctx.fillStyle = "#0e1117";
             ctx.fillRect(0, 0, W, H);
             
-            // Draw Asphalt
+            // Draw Road
             ctx.beginPath(); 
             ctx.moveTo(-50, getRoadCenterY(-50));
             for (let x = 0; x <= W + 50; x += 5) ctx.lineTo(x, getRoadCenterY(x));
-            ctx.lineWidth = 120; // Slightly wider road for the new offsets
-            ctx.strokeStyle = "#444"; 
-            ctx.stroke();
+            ctx.lineWidth = 120; ctx.strokeStyle = "#444"; ctx.stroke();
 
             // Draw Yellow Center Line
             ctx.beginPath(); ctx.setLineDash([15, 15]);
             for (let x = 0; x <= W; x += 5) ctx.lineTo(x, getRoadCenterY(x));
-            ctx.lineWidth = 4; 
-            ctx.strokeStyle = "#ffd700"; 
-            ctx.stroke(); 
+            ctx.lineWidth = 4; ctx.strokeStyle = "#ffd700"; ctx.stroke(); 
             ctx.setLineDash([]);
 
             // Draw Vehicles

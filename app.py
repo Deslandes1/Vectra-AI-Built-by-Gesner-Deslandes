@@ -1,29 +1,55 @@
 import streamlit as st
 
-st.set_page_config(page_title="Vectra AI – True Heading", layout="wide")
+st.set_page_config(page_title="GlobalInternet.py | Vectra AI", layout="wide")
 
-# --- 1. SIDEBAR ---
+# --- 1. SIDEBAR: PROFESSIONAL PROFILE & ROADMAP ---
 with st.sidebar:
+    # --- COMPANY BRANDING ---
+    st.header("🌐 GlobalInternet.py")
+    st.markdown("""
+    **Owner:** Gesner Deslandes  
+    **Role:** Python Builder  
+    **Company Type:** Online Software Company  
+    ---
+    📧 [deslandes78@gmail.com](mailto:deslandes78@gmail.com)  
+    📞 (509)-47385663
+    """)
+    
+    st.divider()
+    
+    # --- TRAFFIC CONTROLS ---
     st.header("🚦 Traffic Control")
     speed_limit = st.select_slider("AI Speed Limit (MPH)", options=[20, 30, 40, 50, 60, 70, 80], value=50)
     sim_limit = speed_limit / 15 
+    
     st.divider()
+    
+    # --- PROJECT ROADMAP ---
     st.header("🗺️ Project Roadmap")
     roadmap_url = "https://raw.githubusercontent.com/Deslandes1/Vectra-AI-Built-by-Gesner-Deslandes/main/Gemini_Generated_Image_mcrtf8mcrtf8mcrt.png"
     st.image(roadmap_url, caption="Vectra AI Development Phases", use_container_width=True)
-    uploaded_file = st.file_uploader("Update Roadmap", type=["jpg", "png", "jpeg"])
+    
+    st.subheader("Update Roadmap")
+    uploaded_file = st.file_uploader("Upload new roadmap image...", type=["jpg", "png", "jpeg"])
 
-# --- 2. HEADER & VIDEO ---
+# --- 2. MAIN UI HEADER & VIDEO ---
 st.markdown(f"""
 <div style="text-align: center;">
-    <h1>🚗 Vectra AI – Heading & Rotation Logic</h1>
-    <p style="font-size: 1.1rem;">built by <strong>Gesner Deslandes</strong></p>
+    <h1>🚗 Vectra AI – Zero-Collision Autopilot</h1>
+    <p style="font-size: 1.1rem; color: #555;">Developed by <strong>Gesner Deslandes</strong> | GlobalInternet.py</p>
 </div>
 """, unsafe_allow_html=True)
 
 st.video("https://raw.githubusercontent.com/Deslandes1/Vectra-AI-Built-by-Gesner-Deslandes/main/AI%20Selfdriving.mp4")
 
-# --- 3. SIMULATION ENGINE ---
+# --- 3. PRICING VALUATION SECTION ---
+st.markdown("---")
+col1, col2, col3 = st.columns(3)
+with col2:
+    st.metric(label="Fair Market Valuation (B2B Licensing)", value="$4,500 - $12,000", delta="Per Implementation")
+    st.caption("Based on real-time physics engine, AI lane-discipline logic, and custom heading algorithms.")
+
+# --- 4. SIMULATION ENGINE ---
 sim_html = f"""
 <canvas id="gameCanvas" width="900" height="500" style="display: block; margin: 0 auto; border: 2px solid #b87c4f; border-radius: 12px;"></canvas>
 <div style="text-align: center; margin-top: 15px;">
@@ -48,9 +74,8 @@ sim_html = f"""
             return H/2 + 30 + Math.sin(x / 90) * 45 + Math.sin(x / 200) * 25;
         }}
 
-        // MATH: Get the angle of the road at any X coordinate
         function getRoadAngle(x, direction = 1) {{
-            const lookAhead = 2; // Check 2 pixels ahead
+            const lookAhead = 2;
             const y1 = getRoadCenterY(x);
             const y2 = getRoadCenterY(x + (lookAhead * direction));
             return Math.atan2(y2 - y1, lookAhead * direction);
@@ -63,7 +88,6 @@ sim_html = f"""
         }};
 
         function update() {{
-            // 1. Blue Car Logic
             car.speed += (TARGET_VELOCITY - car.speed) * 0.05;
             car.x += car.speed;
             car.y = getRoadCenterY(car.x) + LANE_OFFSET;
@@ -75,7 +99,6 @@ sim_html = f"""
             }}
             document.getElementById('currSpeedDisplay').innerText = Math.round(car.speed * 15);
 
-            // 2. Red Car Logic
             obstacles.forEach(o => {{
                 o.x -= 2.5;
                 o.y = getRoadCenterY(o.x) - LANE_OFFSET;
@@ -89,7 +112,6 @@ sim_html = f"""
             ctx.translate(x, y);
             ctx.rotate(angle);
             ctx.fillStyle = color;
-            // Draw relative to center so rotation looks natural
             ctx.fillRect(-CAR_W/2, -CAR_H/2, CAR_W, CAR_H);
             ctx.restore();
         }}
@@ -97,17 +119,12 @@ sim_html = f"""
         function draw() {{
             ctx.fillStyle = "#0e1117";
             ctx.fillRect(0, 0, W, H);
-            
-            // Draw Road & Yellow Line
             ctx.beginPath(); ctx.moveTo(-50, getRoadCenterY(-50));
             for (let x = -50; x <= W + 50; x += 5) ctx.lineTo(x, getRoadCenterY(x));
             ctx.lineWidth = 120; ctx.strokeStyle = "#444"; ctx.stroke();
-
             ctx.beginPath(); ctx.setLineDash([15, 15]);
             for (let x = -50; x <= W + 50; x += 5) ctx.lineTo(x, getRoadCenterY(x));
             ctx.lineWidth = 4; ctx.strokeStyle = "#ffd700"; ctx.stroke(); ctx.setLineDash([]);
-
-            // Draw Blue Car & Red Traffic with specific rotation
             drawCar(car.x, car.y, car.angle, "#00d4ff");
             obstacles.forEach(o => drawCar(o.x, o.y, o.angle, "#ff4b4b"));
         }}

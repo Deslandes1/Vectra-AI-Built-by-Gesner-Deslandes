@@ -11,6 +11,7 @@ st.markdown("""
     button { background: #00c9a7; border: none; color: black; padding: 8px 16px; font-weight: bold; border-radius: 8px; cursor: pointer; margin: 5px; }
     button:hover { background: #00a8c5; }
     .footer { text-align: center; margin-top: 20px; color: #888; font-size: 0.8rem; }
+    .sensor-diagram { background: #1e2a3a; border-radius: 16px; padding: 1rem; margin: 1rem 0; text-align: center; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -26,11 +27,8 @@ st.markdown("""
 # --- Demonstration Video ---
 st.markdown("## 🎥 Vectra AI in Action")
 st.markdown("Watch the autonomous driving system navigate real roads with a human driver monitoring only (hands-off).")
-
-# Use the raw URL to the MP4 file on GitHub
 video_url = "https://raw.githubusercontent.com/Deslandes1/Vectra-AI-Built-by-Gesner-Deslandes/main/AI%20Selfdriving.mp4"
 st.video(video_url)
-
 st.caption("Note: If the video does not play, your browser may not support the MP4 format. Try viewing this app in Chrome or Edge.")
 
 # --- The Simulation Canvas ---
@@ -259,7 +257,38 @@ st.components.v1.html(sim_html, height=560, scrolling=False)
 st.markdown("""
 ---
 ### 🧠 How Vectra AI works
+""")
 
+# --- Illustrative diagram (SVG) ---
+st.markdown("""
+<div class="sensor-diagram">
+    <svg width="100%" height="200" viewBox="0 0 600 150" xmlns="http://www.w3.org/2000/svg">
+        <!-- Car body -->
+        <rect x="250" y="100" width="100" height="40" rx="8" fill="#2ecc71" stroke="#1e8449" stroke-width="2"/>
+        <!-- Car windows -->
+        <rect x="260" y="108" width="20" height="15" fill="#ecf0f1" rx="3"/>
+        <rect x="320" y="108" width="20" height="15" fill="#ecf0f1" rx="3"/>
+        <!-- Wheels -->
+        <circle cx="270" cy="140" r="10" fill="#333"/>
+        <circle cx="330" cy="140" r="10" fill="#333"/>
+        <!-- Sensors (rays) -->
+        <line x1="300" y1="100" x2="300" y2="20" stroke="#00ffcc" stroke-width="2" stroke-dasharray="4,2"/>
+        <line x1="280" y1="105" x2="240" y2="30" stroke="#00ffcc" stroke-width="2" stroke-dasharray="4,2"/>
+        <line x1="320" y1="105" x2="360" y2="30" stroke="#00ffcc" stroke-width="2" stroke-dasharray="4,2"/>
+        <line x1="260" y1="110" x2="210" y2="50" stroke="#00ffcc" stroke-width="2" stroke-dasharray="4,2"/>
+        <line x1="340" y1="110" x2="390" y2="50" stroke="#00ffcc" stroke-width="2" stroke-dasharray="4,2"/>
+        <!-- Labels -->
+        <text x="290" y="15" fill="#00ffcc" font-size="12">Front</text>
+        <text x="220" y="35" fill="#00ffcc" font-size="12">Left</text>
+        <text x="370" y="35" fill="#00ffcc" font-size="12">Right</text>
+        <text x="180" y="60" fill="#00ffcc" font-size="12">Far left</text>
+        <text x="410" y="60" fill="#00ffcc" font-size="12">Far right</text>
+    </svg>
+    <p><em>Diagram: The car uses 5 sensors (rays) to detect obstacles. The AI steers away from the closest one.</em></p>
+</div>
+""", unsafe_allow_html=True)
+
+st.markdown("""
 - The car has **5 sensors** (rays) pointing forward at different angles.
 - Each sensor measures the distance to the nearest obstacle or screen edge.
 - The AI steers away from the side where the closest obstacle is detected.

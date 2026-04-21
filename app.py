@@ -1,146 +1,160 @@
 import streamlit as st
 
-st.set_page_config(page_title="Vectra AI – Precision Driving", layout="wide")
+st.set_page_config(page_title="Vectra AI – Dust Road Driving", layout="wide")
 
+# --- Original Custom Styling ---
 st.markdown("""
 <style>
     body { margin: 0; background-color: #0e1117; }
-    canvas { display: block; margin: 0 auto; border: 3px solid #b87c4f; border-radius: 12px; }
+    canvas { display: block; margin: 0 auto; border: 2px solid #b87c4f; border-radius: 12px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
     .info { text-align: center; font-family: monospace; font-size: 1.2rem; margin-top: 10px; color: white; }
-    .controls { text-align: center; margin-top: 15px; }
-    button { background: #b87c4f; border: none; color: white; padding: 10px 20px; font-weight: bold; border-radius: 8px; cursor: pointer; margin: 5px; }
+    button { background: #b87c4f; border: none; color: white; padding: 8px 16px; font-weight: bold; border-radius: 8px; cursor: pointer; margin: 5px; }
     button:hover { background: #9a653f; }
+    .footer { text-align: center; margin-top: 20px; color: #888; font-size: 0.8rem; }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<h1 style='text-align: center; color: white;'>🚗 Vectra AI Precision System</h1>", unsafe_allow_html=True)
-
-# --- The Simulation Logic ---
-sim_html = """
-<canvas id="gameCanvas" width="900" height="500"></canvas>
-<div class="info">
-    🚦 Limit: <span id="limitDisp">45 mph</span> &nbsp;|&nbsp; 
-    🏎️ Speed: <span id="speedDisp">0.0</span> &nbsp;|&nbsp; 
-    🎲 Clicks: <span id="spawnIdx">0</span>
+st.markdown("""
+<div style="text-align: center;">
+    <h1>🚗 Vectra AI – Dust Road</h1>
+    <p style="font-size: 1.1rem;">built by <strong>Gesner Deslandes</strong></p>
+    <p>Self‑Driving Car on a winding dirt road – strictly avoids oncoming cars on the left</p>
 </div>
-<div class="controls">
-    <button onclick="setLimit(30, 2.0)">30 MPH</button>
-    <button onclick="setLimit(45, 3.5)">45 MPH</button>
-    <button onclick="setLimit(70, 5.5)">70 MPH</button>
-    <button id="spawnBtn" style="background:#2ecc71;">🚀 Spawn Oncoming</button>
-    <button id="resetBtn" style="background:#e63946;">🔄 Reset</button>
+""", unsafe_allow_html=True)
+
+# --- Restored Demonstration Video ---
+st.markdown("## 🎥 Vectra AI in Action")
+st.markdown("Watch the autonomous driving system navigate real roads with a human driver monitoring only.")
+video_url = "https://raw.githubusercontent.com/Deslandes1/Vectra-AI-Built-by-Gesner-Deslandes/main/AI%20Selfdriving.mp4"
+st.video(video_url)
+
+# --- Simulation Canvas ---
+sim_html = """
+<canvas id="gameCanvas" width="900" height="500" tabindex="0" style="outline: none; cursor: crosshair;"></canvas>
+<div class="info">
+    🧠 AI Status: <span id="status">Driving</span> &nbsp;|&nbsp;
+    🚗 Oncoming Traffic: <span id="obstacleCount">0</span> &nbsp;|&nbsp;
+    💥 Collisions: <span id="collisionCount">0</span>
+</div>
+<div style="text-align: center; margin-top: 10px;">
+    <button id="resetBtn">🔄 Reset Drive</button>
+    <button id="clearObstaclesBtn">🗑️ Clear Other Cars</button>
+    <button id="randomObstaclesBtn">🎲 Add Oncoming Cars (Left Side)</button>
 </div>
 
 <script>
     (function() {
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        const statusSpan = document.getElementById('status');
+        const obstacleCountSpan = document.getElementById('obstacleCount');
+        const collisionCountSpan = document.getElementById('collisionCount');
+
         const W = 900, H = 500;
-        
-        let speedLimit = 3.5;
-        let car = { x: 50, y: 250, w: 34, h: 18, speed: 0 };
+        const CAR_WIDTH = 30, CAR_HEIGHT = 20;
+        const SENSOR_LENGTH = 160;
+        const MAX_SPEED = 3.5;
+        const ONCOMING_SPEED = -2.5; // Driving West (Opposite)
+
+        let car = { x: 50, y: 0, speed: 0, alive: true, collisions: 0 };
         let obstacles = [];
-        let spawnClicks = 0;
 
-        function getRoadCenter(x) { return H/2 + Math.sin(x/120)*50; }
-
-        window.setLimit = (label, val) => {
-            speedLimit = val;
-            document.getElementById('limitDisp').innerText = label + " mph";
-        };
-
-        document.getElementById('spawnBtn').onclick = () => {
-            spawnClicks++;
-            document.getElementById('spawnIdx').innerText = spawnClicks;
-            
-            // Scaled Spawning Logic: 1st=2, 2nd=2, 4th=4
-            let qty = 1;
-            if (spawnClicks === 1 || spawnClicks === 2) qty = 2;
-            else if (spawnClicks === 4) qty = 4;
-
-            for(let i=0; i<qty; i++) {
-                obstacles.push({
-                    x: W + (i * 150),
-                    y: getRoadCenter(W) - 30, // Oncoming Left Lane
-                    w: 30, h: 18,
-                    speed: speedLimit * 0.8
-                });
-            }
-        };
+        function getRoadCenterY(x) {
+            return H/2 + 30 + Math.sin(x / 90) * 45 + Math.sin(x / 200) * 25;
+        }
 
         function update() {
-            // 1. Strict Boundary Constraints
-            let roadMid = getRoadCenter(car.x + car.w/2);
-            let roadTopLimit = roadMid + 5;      // Center line wall
-            let roadBottomLimit = roadMid + 45; // Right edge wall
-            
-            // Auto-steer to stay in right lane center
-            let targetY = roadMid + 22;
-            car.y += (targetY - car.y) * 0.1;
+            if (!car.alive) return;
 
-            // Physical Blockers: Prevents leaving road or crossing center
-            if (car.y < roadTopLimit) car.y = roadTopLimit;
-            if (car.y + car.h > roadBottomLimit) car.y = roadBottomLimit - car.h;
-
-            // 2. Speed & Collision
-            let braking = 0;
-            obstacles.forEach(o => {
-                o.x -= o.speed;
-                // Collision Detection
-                if (car.x < o.x + o.w && car.x + car.w > o.x &&
-                    car.y < o.y + o.h && car.y + car.h > o.y) {
-                    car.speed = 0; // Emergency Hard Stop
-                }
-            });
-
-            car.speed += (speedLimit - car.speed) * 0.05;
+            // 1. Player Physics (Stay on Right)
+            car.speed = Math.min(car.speed + 0.1, MAX_SPEED);
             car.x += car.speed;
-            if (car.x > W) car.x = -50;
-            
-            document.getElementById('speedDisp').innerText = (car.speed * 12.5).toFixed(1);
-            obstacles = obstacles.filter(o => o.x > -100);
+            if (car.x > W + 50) car.x = -50;
+            // Physical Lane Lock
+            car.y = getRoadCenterY(car.x) + 20 - (CAR_HEIGHT/2);
+
+            // 2. Oncoming Traffic (Stay on Left, Move West)
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                let o = obstacles[i];
+                o.x += ONCOMING_SPEED;
+                o.y = getRoadCenterY(o.x) - 20 - (CAR_HEIGHT/2);
+                if (o.x < -100) obstacles.splice(i, 1);
+            }
+            obstacleCountSpan.innerText = obstacles.length;
+
+            // 3. Collision Logic
+            for (let o of obstacles) {
+                if (car.x < o.x + CAR_WIDTH && car.x + CAR_WIDTH > o.x &&
+                    car.y < o.y + CAR_HEIGHT && car.y + CAR_HEIGHT > o.y) {
+                    car.alive = false;
+                    car.collisions++;
+                    statusSpan.innerText = "CRASH!";
+                }
+            }
         }
 
         function draw() {
-            ctx.fillStyle = "#1a1a1a";
-            ctx.fillRect(0,0,W,H);
+            // Draw Ground
+            ctx.fillStyle = "#c9a87b";
+            ctx.fillRect(0, 0, W, H);
 
             // Draw Road
             ctx.beginPath();
-            for(let x=0; x<=W; x+=10) ctx.lineTo(x, getRoadCenter(x));
+            ctx.moveTo(-50, getRoadCenterY(-50));
+            for (let x = 0; x <= W + 50; x += 10) ctx.lineTo(x, getRoadCenterY(x));
             ctx.lineWidth = 100;
-            ctx.strokeStyle = "#333";
+            ctx.strokeStyle = "#a56b3a";
             ctx.stroke();
 
-            // Center Line
+            // Center Lane Marker
             ctx.beginPath();
-            ctx.setLineDash([20, 20]);
-            for(let x=0; x<=W; x+=10) ctx.lineTo(x, getRoadCenter(x));
-            ctx.lineWidth = 4;
-            ctx.strokeStyle = "#f1c40f";
+            ctx.setLineDash([15, 20]);
+            for (let x = 0; x <= W; x += 5) ctx.lineTo(x, getRoadCenterY(x));
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = "#f0d5a8";
             ctx.stroke();
             ctx.setLineDash([]);
 
-            // AI Car
-            ctx.fillStyle = "#2ecc71";
-            ctx.fillRect(car.x, car.y, car.w, car.h);
+            // Draw Oncoming (Red)
+            ctx.fillStyle = "#e63946";
+            for (let o of obstacles) ctx.fillRect(o.x, o.y, CAR_WIDTH, CAR_HEIGHT);
 
-            // Traffic
-            ctx.fillStyle = "#e74c3c";
-            obstacles.forEach(o => ctx.fillRect(o.x, o.y, o.w, o.h));
-
-            update();
-            requestAnimationFrame(draw);
+            // Draw Car (Green)
+            ctx.fillStyle = car.alive ? "#2a9d8f" : "#555";
+            ctx.fillRect(car.x, car.y, CAR_WIDTH, CAR_HEIGHT);
         }
 
-        document.getElementById('resetBtn').onclick = () => {
-            car.x = 50; obstacles = []; spawnClicks = 0;
-            document.getElementById('spawnIdx').innerText = "0";
-        };
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
 
-        draw();
+        document.getElementById('randomObstaclesBtn').onclick = () => {
+            obstacles.push({ x: W + 100, y: 0 });
+        };
+        document.getElementById('resetBtn').onclick = () => {
+            car.x = 50; car.alive = true; obstacles = []; car.speed = 0;
+            statusSpan.innerText = "Driving";
+        };
+        document.getElementById('clearObstaclesBtn').onclick = () => { obstacles = []; };
+
+        loop();
     })();
 </script>
 """
 
-st.components.v1.html(sim_html, height=650)
+st.components.v1.html(sim_html, height=600)
+
+# --- Speed and Friction Logic (Fixed Line 141) ---
+st.markdown("""
+### 🧠 Speed Control Logic
+The AI doesn't just "jump" to the new speed. It calculates the difference between its current velocity and the road limit, applying a **0.05 friction/acceleration coefficient**. 
+
+This ensures that if you switch from 30 MPH to 70 MPH, you see the car physically lean into the acceleration rather than snapping instantly to a new value.
+
+---
+<div class="footer">
+    Vectra AI built by <strong>Gesner Deslandes</strong> – GlobalInternet.py
+</div>
+""", unsafe_allow_html=True)

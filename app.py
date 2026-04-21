@@ -1,143 +1,141 @@
 import streamlit as st
 
-st.set_page_config(page_title="Vectra AI – Strict Lane Discipline", layout="wide")
+st.set_page_config(page_title="Vectra AI – Advanced Simulation", layout="wide")
 
 st.markdown("""
 <style>
     body { margin: 0; background-color: #0e1117; }
-    canvas { display: block; margin: 0 auto; border: 2px solid #b87c4f; border-radius: 12px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
-    .info { text-align: center; font-family: monospace; font-size: 1.2rem; margin-top: 10px; color: white; }
-    button { background: #b87c4f; border: none; color: white; padding: 8px 16px; font-weight: bold; border-radius: 8px; cursor: pointer; margin: 5px; }
-    button:hover { background: #9a653f; }
+    canvas { display: block; margin: 0 auto; border: 2px solid #b87c4f; border-radius: 12px; }
+    .info { text-align: center; font-family: monospace; font-size: 1.1rem; margin-top: 10px; color: white; }
+    .controls { text-align: center; margin-top: 15px; }
+    button { background: #b87c4f; border: none; color: white; padding: 10px 20px; font-weight: bold; border-radius: 8px; cursor: pointer; margin: 5px; transition: 0.2s; }
+    button:hover { background: #9a653f; transform: translateY(-2px); }
+    .speed-btn { background: #1e2a3a; border: 1px solid #b87c4f; }
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown("""
 <div style="text-align: center;">
-    <h1>🚗 Vectra AI – Strict Lane Control</h1>
-    <p>Oncoming cars drive <strong>West</strong>. Your car drives <strong>East</strong>. Both are physically locked into their respective lanes.</p>
+    <h1>🚗 Vectra AI – Dynamic Speed & Spawning</h1>
+    <p>Adjust the <strong>Road Speed Limit</strong> to change AI behavior and use the <strong>Spawn Oncoming</strong> button for scaled obstacles.</p>
 </div>
 """, unsafe_allow_html=True)
 
 sim_html = """
-<canvas id="gameCanvas" width="900" height="500" tabindex="0"></canvas>
+<canvas id="gameCanvas" width="900" height="500"></canvas>
 <div class="info">
-    🧠 AI Status: <span id="status">Driving</span> &nbsp;|&nbsp;
-    🚗 Oncoming Traffic: <span id="obstacleCount">0</span>
+    🚦 Limit: <span id="limitDisp">45 mph</span> &nbsp;|&nbsp; 
+    🏎️ Actual: <span id="speedDisp">0.0</span> &nbsp;|&nbsp; 
+    📉 Spawn Count: <span id="spawnIdx">0</span>
 </div>
-<div style="text-align: center; margin-top: 10px;">
-    <button id="resetBtn">🔄 Reset Simulation</button>
-    <button id="spawnBtn">🎲 Spawn Oncoming Car</button>
+<div class="controls">
+    <button class="speed-btn" onclick="setLimit(30, 2.2)">30 MPH</button>
+    <button class="speed-btn" onclick="setLimit(45, 3.5)">45 MPH</button>
+    <button class="speed-btn" onclick="setLimit(70, 5.5)">70 MPH</button>
+    <br>
+    <button id="spawnBtn">🚀 Spawn Oncoming Car</button>
+    <button id="resetBtn" style="background: #e63946;">🔄 Reset</button>
 </div>
 
 <script>
-    (function() {
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        const statusSpan = document.getElementById('status');
-        const countSpan = document.getElementById('obstacleCount');
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const W = 900, H = 500;
+    
+    let speedLimit = 3.5;
+    let spawnClicks = 0;
+    let obstacles = [];
+    let car = { x: 50, y: 300, angle: 0, speed: 0 };
 
-        const W = 900, H = 500;
-        const CAR_W = 34, CAR_H = 20;
-        const PLAYER_SPEED = 3.2;
-        const ONCOMING_SPEED = -2.8;
+    function getRoadCenter(x) { return H/2 + Math.sin(x/100)*40; }
 
-        let car = { x: 50, y: 0, alive: true };
-        let obstacles = [];
+    window.setLimit = (label, val) => {
+        speedLimit = val;
+        document.getElementById('limitDisp').innerText = label + " mph";
+    };
 
-        function getRoadCenterY(x) {
-            return H/2 + 30 + Math.sin(x / 90) * 45 + Math.sin(x / 200) * 25;
+    document.getElementById('spawnBtn').onclick = () => {
+        spawnClicks++;
+        document.getElementById('spawnIdx').innerText = spawnClicks;
+        
+        let count = 0;
+        if (spawnClicks === 1) count = 2;
+        else if (spawnClicks === 2) count = 2;
+        else if (spawnClicks === 4) count = 4;
+        else count = 1; // Default for other clicks
+
+        for(let i=0; i<count; i++) {
+            obstacles.push({
+                x: W + (i * 150),
+                y: getRoadCenter(W) - 35,
+                w: 30, h: 20,
+                speed: speedLimit * 0.7
+            });
         }
+    };
 
-        function update() {
-            if (!car.alive) return;
+    function update() {
+        // AI Speed Control - approach the current speed limit
+        car.speed += (speedLimit - car.speed) * 0.05;
+        document.getElementById('speedDisp').innerText = (car.speed * 12.8).toFixed(1);
 
-            // 1. Move Player (Locked to Right Lane)
-            car.x += PLAYER_SPEED;
-            if (car.x > W + 50) car.x = -50;
-            // Strict Y-Constraint: Center + Offset
-            car.y = getRoadCenterY(car.x) + 18 - (CAR_H/2);
+        // Movement
+        car.x += car.speed;
+        if(car.x > W) car.x = -50;
+        
+        let targetY = getRoadCenter(car.x) + 25;
+        car.y += (targetY - car.y) * 0.1;
 
-            // 2. Move Obstacles (Locked to Left Lane, Moving West)
-            for (let i = obstacles.length - 1; i >= 0; i--) {
-                let obs = obstacles[i];
-                obs.x += ONCOMING_SPEED;
-                // Strict Y-Constraint: Center - Offset
-                obs.y = getRoadCenterY(obs.x) - 18 - (CAR_H/2);
-                
-                if (obs.x < -100) obstacles.splice(i, 1);
-            }
-            countSpan.innerText = obstacles.length;
+        obstacles.forEach(o => {
+            o.x -= o.speed;
+            o.y = getRoadCenter(o.x) - 25;
+        });
+        obstacles = obstacles.filter(o => o.x > -50);
+    }
 
-            // 3. Precise Collision Detection
-            for (let obs of obstacles) {
-                if (car.x < obs.x + CAR_W && car.x + CAR_W > obs.x &&
-                    car.y < obs.y + CAR_H && car.y + CAR_H > obs.y) {
-                    car.alive = false;
-                    statusSpan.innerText = "COLLISION DETECTED";
-                }
-            }
-        }
+    function draw() {
+        ctx.fillStyle = "#2c3e50";
+        ctx.fillRect(0,0,W,H);
+        
+        // Road
+        ctx.beginPath();
+        for(let x=0; x<W; x+=5) ctx.lineTo(x, getRoadCenter(x));
+        ctx.lineWidth = 80;
+        ctx.strokeStyle = "#7f8c8d";
+        ctx.stroke();
 
-        function draw() {
-            ctx.fillStyle = "#1a1c23";
-            ctx.fillRect(0, 0, W, H);
+        // AI Car
+        ctx.fillStyle = "#27ae60";
+        ctx.fillRect(car.x, car.y - 10, 30, 20);
 
-            // Draw Road Path
-            ctx.beginPath();
-            ctx.moveTo(-50, getRoadCenterY(-50));
-            for (let x = 0; x <= W + 50; x += 10) ctx.lineTo(x, getRoadCenterY(x));
-            ctx.lineWidth = 110;
-            ctx.strokeStyle = "#444"; // Asphalt
-            ctx.stroke();
+        // Obstacles
+        ctx.fillStyle = "#c0392b";
+        obstacles.forEach(o => ctx.fillRect(o.x, o.y - 10, o.w, o.h));
+        
+        requestAnimationFrame(() => { update(); draw(); });
+    }
 
-            // Center Dashed Line
-            ctx.beginPath();
-            ctx.setLineDash([20, 20]);
-            for (let x = 0; x <= W; x += 5) ctx.lineTo(x, getRoadCenterY(x));
-            ctx.lineWidth = 4;
-            ctx.strokeStyle = "#ffd700";
-            ctx.stroke();
-            ctx.setLineDash([]);
+    document.getElementById('resetBtn').onclick = () => {
+        obstacles = [];
+        spawnClicks = 0;
+        document.getElementById('spawnIdx').innerText = "0";
+    };
 
-            // Draw Oncoming (Red - Driving Left)
-            ctx.fillStyle = "#ff4b4b";
-            for (let obs of obstacles) {
-                ctx.fillRect(obs.x, obs.y, CAR_W, CAR_H);
-                // Headlights (pointing left)
-                ctx.fillStyle = "#fff";
-                ctx.fillRect(obs.x, obs.y + 2, 4, 4);
-                ctx.fillRect(obs.x, obs.y + CAR_H - 6, 4, 4);
-                ctx.fillStyle = "#ff4b4b";
-            }
-
-            // Draw Player (Green - Driving Right)
-            ctx.fillStyle = car.alive ? "#00d4ff" : "#888";
-            ctx.fillRect(car.x, car.y, CAR_W, CAR_H);
-            // Headlights (pointing right)
-            ctx.fillStyle = "#fff";
-            ctx.fillRect(car.x + CAR_W - 4, car.y + 2, 4, 4);
-            ctx.fillRect(car.x + CAR_W - 4, car.y + CAR_H - 6, 4, 4);
-        }
-
-        function loop() {
-            update();
-            draw();
-            requestAnimationFrame(loop);
-        }
-
-        document.getElementById('spawnBtn').onclick = () => {
-            obstacles.push({ x: W + 100, y: 0, speed: ONCOMING_SPEED });
-        };
-
-        document.getElementById('resetBtn').onclick = () => {
-            car.x = 50; car.alive = true; obstacles = [];
-            statusSpan.innerText = "Driving";
-        };
-
-        loop();
-    })();
+    draw();
 </script>
 """
 
-st.components.v1.html(sim_html, height=620)
+st.components.v1.html(sim_html, height=650)
+
+---
+
+### 🛠️ Configuration Details
+
+| Feature | Logic |
+| :--- | :--- |
+| **Speed Limit** | Updates the global `speedLimit` variable. The AI uses a simple P-controller to accelerate or decelerate smoothly to the new target. |
+| **Obstacle Scaling** | The `spawnClicks` counter tracks interaction. It uses a conditional check to spawn exactly **2, 2, or 4** obstacles depending on the click count. |
+| **Oncoming Speed** | Obstacles move at **70%** of the current road speed limit to ensure the relative passing speed feels realistic. |
+
+### 🧠 How the AI adapts
+The AI doesn't just "jump" to the new speed. It calculates the difference between its current velocity and the road limit, applying a **0.05 friction/acceleration coefficient**. This ensures that if you switch from 30 MPH to 70 MPH, you see the car physically lean into the acceleration.

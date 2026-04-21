@@ -3,7 +3,7 @@ import base64
 from PIL import Image
 import io
 
-st.set_page_config(page_title="Vectra AI – Speed Limit Control", layout="wide")
+st.set_page_config(page_title="Vectra AI – Safe Traffic Flow", layout="wide")
 
 # --- Custom Styling ---
 st.markdown("""
@@ -21,18 +21,15 @@ st.markdown("""
 with st.sidebar:
     st.header("🚦 Road Controls")
     
-    # 1. Speed Limit Selection
     speed_limit = st.select_slider(
         "Set Road Speed Limit (MPH)",
         options=[20, 30, 40, 50, 60, 70, 80],
         value=40
     )
-    # Convert MPH to simulation pixels-per-frame (approximate scaling)
     sim_limit = speed_limit / 15 
     
     st.divider()
     
-    # 2. Roadmap Upload
     st.header("🗺️ Roadmap Integration")
     uploaded_file = st.file_uploader("Upload top-down roadmap...", type=["jpg", "png", "jpeg"])
     
@@ -46,8 +43,9 @@ with st.sidebar:
 
 st.markdown("""
 <div style="text-align: center;">
-    <h1>🚗 Vectra AI – Speed Governance</h1>
+    <h1>🚗 Vectra AI – Intelligent Traffic</h1>
     <p style="font-size: 1.1rem;">built by <strong>Gesner Deslandes</strong></p>
+    <p>Oncoming cars now maintain safe distances and never collide with each other.</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -56,17 +54,16 @@ video_url = "https://raw.githubusercontent.com/Deslandes1/Vectra-AI-Built-by-Ges
 st.video(video_url)
 
 # --- Simulation Logic ---
-# We pass the 'sim_limit' directly into the JS via f-string
 sim_html = f"""
 <canvas id="gameCanvas" width="900" height="500" tabindex="0"></canvas>
 <div class="info">
     🧠 AI Status: <span id="status">Active</span> &nbsp;|&nbsp; 
-    ⏱️ Current Speed: <span id="currSpeed">0</span> MPH &nbsp;|&nbsp;
-    🛑 Limit: {speed_limit} MPH
+    ⏱️ Your Speed: <span id="currSpeed">0</span> MPH &nbsp;|&nbsp;
+    🚗 Oncoming: <span id="obsActive">0</span>
 </div>
 <div style="text-align: center; margin-top: 10px;">
     <button id="resetBtn">🔄 Reset Drive</button>
-    <button id="spawnBtn">🎲 Spawn Oncoming</button>
+    <button id="spawnBtn">🎲 Spawn Oncoming Car</button>
 </div>
 
 <script>
@@ -75,15 +72,16 @@ sim_html = f"""
         const ctx = canvas.getContext('2d');
         const statusSpan = document.getElementById('status');
         const speedSpan = document.getElementById('currSpeed');
+        const obsSpan = document.getElementById('obsActive');
 
         const W = 900, H = 500;
         const CAR_W = 34, CAR_H = 20;
+        const SAFE_DISTANCE = 50; // Minimum pixels between oncoming cars
         
-        // Physics variables
         let car = {{ x: 50, y: 0, speed: 0, alive: true }};
         let obstacles = [];
         const SPEED_LIMIT = {sim_limit}; 
-        const ACCEL = 0.05; // The friction/acceleration coefficient
+        const ACCEL = 0.05; 
 
         function getRoadCenterY(x) {{
             return H/2 + 30 + Math.sin(x / 90) * 45 + Math.sin(x / 200) * 25;
@@ -92,28 +90,43 @@ sim_html = f"""
         function update() {{
             if (!car.alive) return;
 
-            // Apply Speed Logic: Smoothly accelerate toward the limit
-            if (car.speed < SPEED_LIMIT) {{
-                car.speed += (SPEED_LIMIT - car.speed) * ACCEL;
-            }} else if (car.speed > SPEED_LIMIT) {{
-                car.speed -= (car.speed - SPEED_LIMIT) * ACCEL;
-            }}
-
+            // 1. Player Speed Logic
+            car.speed += (SPEED_LIMIT - car.speed) * ACCEL;
             car.x += car.speed;
             if (car.x > W + 50) car.x = -50;
             car.y = getRoadCenterY(car.x) + 18 - (CAR_H/2);
-
-            // Update UI Speed Display
             speedSpan.innerText = Math.round(car.speed * 15);
 
-            // Oncoming traffic
-            for (let i = obstacles.length - 1; i >= 0; i--) {{
-                obstacles[i].x -= 2.5;
-                obstacles[i].y = getRoadCenterY(obstacles[i].x) - 18 - (CAR_H/2);
-                if (obstacles[i].x < -100) obstacles.splice(i, 1);
+            // 2. Intelligent Oncoming Traffic Logic
+            // Sort obstacles by X so we know who is "ahead" in the left lane (smaller X is ahead)
+            obstacles.sort((a, b) => a.x - b.x);
+
+            for (let i = 0; i < obstacles.length; i++) {{
+                let o = obstacles[i];
+                let targetSpeed = -2.5; // Base speed for oncoming
+
+                // Check car in front (the one with the smaller X since they drive West)
+                if (i > 0) {{
+                    let leader = obstacles[i-1];
+                    let distance = o.x - (leader.x + CAR_W);
+                    
+                    if (distance < SAFE_DISTANCE) {{
+                        // Match leader speed and maintain gap
+                        targetSpeed = leader.speed;
+                        if (distance < 10) targetSpeed = -0.1; // Emergency brake
+                    }}
+                }}
+
+                o.speed = targetSpeed;
+                o.x += o.speed;
+                o.y = getRoadCenterY(o.x) - 18 - (CAR_H/2);
             }}
 
-            // Collision check
+            // Remove off-screen
+            obstacles = obstacles.filter(o => o.x > -100);
+            obsSpan.innerText = obstacles.length;
+
+            // 3. Collision Check (Player vs Obstacles)
             for (let o of obstacles) {{
                 if (car.x < o.x + CAR_W && car.x + CAR_W > o.x && 
                     car.y < o.y + CAR_H && car.y + CAR_H > o.y) {{
@@ -136,12 +149,9 @@ sim_html = f"""
             ctx.stroke();
 
             // Center Line
-            ctx.beginPath();
-            ctx.setLineDash([15, 15]);
+            ctx.beginPath(); ctx.setLineDash([15, 15]);
             for (let x = 0; x <= W; x += 5) ctx.lineTo(x, getRoadCenterY(x));
-            ctx.lineWidth = 3;
-            ctx.strokeStyle = "#ffd700";
-            ctx.stroke();
+            ctx.lineWidth = 3; ctx.strokeStyle = "#ffd700"; ctx.stroke();
             ctx.setLineDash([]);
 
             // Draw Car
@@ -159,7 +169,12 @@ sim_html = f"""
             requestAnimationFrame(loop);
         }}
 
-        document.getElementById('spawnBtn').onclick = () => obstacles.push({{ x: W + 50, y: 0 }});
+        document.getElementById('spawnBtn').onclick = () => {{
+            // Only spawn if the entry point is clear to prevent initial overlap
+            let entryClear = obstacles.every(o => o.x < W - 50);
+            if (entryClear) obstacles.push({{ x: W + 50, y: 0, speed: -2.5 }});
+        }};
+
         document.getElementById('resetBtn').onclick = () => {{ 
             car.x = 50; car.speed = 0; car.alive = true; obstacles = []; 
             statusSpan.innerText = "Active";
@@ -172,15 +187,13 @@ sim_html = f"""
 
 st.components.v1.html(sim_html, height=600)
 
-# --- Speed and Friction Description ---
 st.markdown(f"""
 ---
-### 🧠 Speed Governance System
-The AI is currently governed by a **{speed_limit} MPH** limit. 
-
-Unlike basic simulations that jump instantly between velocities, this AI uses a differential equation to calculate acceleration:
-* **Friction/Accel Coefficient:** `0.05`
-* **Behavior:** When you increase the limit via the sidebar, the car physically leans into the acceleration, mimicking real-world inertia.
+### 🧠 Traffic Intelligence (V2)
+The oncoming fleet is now governed by a **Distance-Keeping Algorithm**:
+* **Collision Prevention:** Each car monitors the `x` coordinate of the vehicle in front of it.
+* **Speed Matching:** If an oncoming car detects a "leader" within **50 pixels**, it automatically matches that leader's speed to maintain a constant gap.
+* **Safety Buffer:** Spawning is blocked if the entry point is currently occupied, ensuring no "teleportation" crashes.
 
 <div class="footer">
     Vectra AI built by <strong>Gesner Deslandes</strong> – GlobalInternet.py

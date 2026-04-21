@@ -13,19 +13,22 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- The Simulation ---
+st.markdown("<h1 style='text-align: center; color: white;'>🚗 Vectra AI Precision System</h1>", unsafe_allow_html=True)
+
+# --- The Simulation Logic ---
 sim_html = """
 <canvas id="gameCanvas" width="900" height="500"></canvas>
 <div class="info">
-    🛡️ System: <span id="status">Active</span> &nbsp;|&nbsp; 
-    🏎️ Safety Buffer: <span id="buffer">15px</span> &nbsp;|&nbsp;
-    🚧 Near Misses: <span id="misses">0</span>
+    🚦 Limit: <span id="limitDisp">45 mph</span> &nbsp;|&nbsp; 
+    🏎️ Speed: <span id="speedDisp">0.0</span> &nbsp;|&nbsp; 
+    🎲 Clicks: <span id="spawnIdx">0</span>
 </div>
 <div class="controls">
-    <button onclick="setLimit(30, 2.0)">Low Speed (City)</button>
-    <button onclick="setLimit(60, 4.5)">High Speed (Highway)</button>
-    <button id="spawnBtn">🚀 Add Traffic</button>
-    <button id="resetBtn" style="background:#e63946;">🔄 System Reset</button>
+    <button onclick="setLimit(30, 2.0)">30 MPH</button>
+    <button onclick="setLimit(45, 3.5)">45 MPH</button>
+    <button onclick="setLimit(70, 5.5)">70 MPH</button>
+    <button id="spawnBtn" style="background:#2ecc71;">🚀 Spawn Oncoming</button>
+    <button id="resetBtn" style="background:#e63946;">🔄 Reset</button>
 </div>
 
 <script>
@@ -35,22 +38,30 @@ sim_html = """
         const W = 900, H = 500;
         
         let speedLimit = 3.5;
-        let car = { x: 50, y: 250, w: 34, h: 18, speed: 0, angle: 0 };
+        let car = { x: 50, y: 250, w: 34, h: 18, speed: 0 };
         let obstacles = [];
-        let spawnCount = 0;
-        let nearMisses = 0;
+        let spawnClicks = 0;
 
         function getRoadCenter(x) { return H/2 + Math.sin(x/120)*50; }
 
-        window.setLimit = (l, v) => speedLimit = v;
+        window.setLimit = (label, val) => {
+            speedLimit = val;
+            document.getElementById('limitDisp').innerText = label + " mph";
+        };
 
         document.getElementById('spawnBtn').onclick = () => {
-            spawnCount++;
-            let qty = (spawnCount === 1 || spawnCount === 2) ? 2 : (spawnCount === 4 ? 4 : 1);
+            spawnClicks++;
+            document.getElementById('spawnIdx').innerText = spawnClicks;
+            
+            // Scaled Spawning Logic: 1st=2, 2nd=2, 4th=4
+            let qty = 1;
+            if (spawnClicks === 1 || spawnClicks === 2) qty = 2;
+            else if (spawnClicks === 4) qty = 4;
+
             for(let i=0; i<qty; i++) {
                 obstacles.push({
-                    x: W + (i * 180),
-                    y: getRoadCenter(W) - 30, // Left Lane
+                    x: W + (i * 150),
+                    y: getRoadCenter(W) - 30, // Oncoming Left Lane
                     w: 30, h: 18,
                     speed: speedLimit * 0.8
                 });
@@ -58,56 +69,50 @@ sim_html = """
         };
 
         function update() {
-            // 1. Lane Discipline & Boundary Hard-Stops
-            let centerX = car.x + car.w/2;
-            let roadMid = getRoadCenter(centerX);
-            let roadBottom = roadMid + 45; // Edge of right lane
-            let roadTop = roadMid + 5;     // Center line boundary
+            // 1. Strict Boundary Constraints
+            let roadMid = getRoadCenter(car.x + car.w/2);
+            let roadTopLimit = roadMid + 5;      // Center line wall
+            let roadBottomLimit = roadMid + 45; // Right edge wall
             
-            // Stay Right Logic
+            // Auto-steer to stay in right lane center
             let targetY = roadMid + 22;
             car.y += (targetY - car.y) * 0.1;
 
-            // Physical Constraint: Never cross center or leave road
-            if (car.y < roadTop) car.y = roadTop;
-            if (car.y + car.h > roadBottom) car.y = roadBottom - car.h;
+            // Physical Blockers: Prevents leaving road or crossing center
+            if (car.y < roadTopLimit) car.y = roadTopLimit;
+            if (car.y + car.h > roadBottomLimit) car.y = roadBottomLimit - car.h;
 
-            // 2. Collision Avoidance (Proactive Braking)
+            // 2. Speed & Collision
             let braking = 0;
             obstacles.forEach(o => {
                 o.x -= o.speed;
-                // Check if obstacle is ahead in the same relative X-path
-                let dist = o.x - (car.x + car.w);
-                if (dist > 0 && dist < 150 && Math.abs(car.y - o.y) < 30) {
-                    braking = 0.2; // Apply brakes if car is in path
-                }
-                
                 // Collision Detection
                 if (car.x < o.x + o.w && car.x + car.w > o.x &&
                     car.y < o.y + o.h && car.y + car.h > o.y) {
-                    car.speed = 0; // Emergency Stop
+                    car.speed = 0; // Emergency Hard Stop
                 }
             });
 
-            car.speed += (speedLimit - car.speed - braking) * 0.05;
+            car.speed += (speedLimit - car.speed) * 0.05;
             car.x += car.speed;
-            if (car.x > W) car.x = -car.w;
+            if (car.x > W) car.x = -50;
             
-            obstacles = obstacles.filter(o => o.x > -50);
+            document.getElementById('speedDisp').innerText = (car.speed * 12.5).toFixed(1);
+            obstacles = obstacles.filter(o => o.x > -100);
         }
 
         function draw() {
             ctx.fillStyle = "#1a1a1a";
             ctx.fillRect(0,0,W,H);
 
-            // Road Geometry
+            // Draw Road
             ctx.beginPath();
             for(let x=0; x<=W; x+=10) ctx.lineTo(x, getRoadCenter(x));
             ctx.lineWidth = 100;
             ctx.strokeStyle = "#333";
             ctx.stroke();
 
-            // Center Line (The "No-Go" Zone)
+            // Center Line
             ctx.beginPath();
             ctx.setLineDash([20, 20]);
             for(let x=0; x<=W; x+=10) ctx.lineTo(x, getRoadCenter(x));
@@ -116,11 +121,11 @@ sim_html = """
             ctx.stroke();
             ctx.setLineDash([]);
 
-            // AI Car (Green)
+            // AI Car
             ctx.fillStyle = "#2ecc71";
             ctx.fillRect(car.x, car.y, car.w, car.h);
 
-            // Traffic (Red)
+            // Traffic
             ctx.fillStyle = "#e74c3c";
             obstacles.forEach(o => ctx.fillRect(o.x, o.y, o.w, o.h));
 
@@ -129,7 +134,8 @@ sim_html = """
         }
 
         document.getElementById('resetBtn').onclick = () => {
-            car.x = 50; obstacles = []; spawnCount = 0;
+            car.x = 50; obstacles = []; spawnClicks = 0;
+            document.getElementById('spawnIdx').innerText = "0";
         };
 
         draw();
@@ -138,13 +144,3 @@ sim_html = """
 """
 
 st.components.v1.html(sim_html, height=650)
-
-## The "Zero-Contact" Protocol
-
-To achieve your goal of **never touching and never leaving the road**, I’ve updated the core engine with these three specific safety layers:
-
-* **Hard-Boundary Constraints**: Instead of just "steering," the car now has a coordinate-check that resets its position if it's even 1 pixel over the center line or the road edge. 
-* **AABB Collision Logic**: I've implemented *Axis-Aligned Bounding Box* detection. This calculates the intersection of the two car rectangles every frame. If an intersection is imminent, the `car.speed` is throttled to 0 instantly.
-* **Dynamic Lane Centering**: The car's Y-coordinate is tied to a `targetY` that is relative to the `getRoadCenter(x)` function, ensuring it follows the curves perfectly.
-
-<FollowUp label="Want to add a 'Safety Distance' slider to control how far the car stays from others?" query="Add a safety distance slider to the simulation to adjust the braking buffer between the AI car and obstacles." />

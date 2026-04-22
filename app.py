@@ -3,7 +3,7 @@ import streamlit as st
 # 1. SYSTEM CONFIG & PRESERVATION
 st.set_page_config(page_title="Vectra AI – Autopilot OS", layout="wide")
 
-# --- SIDEBAR: Informants & Mode Toggle ---
+# --- SIDEBAR: Informants & Mode Toggle (Preserved) ---
 with st.sidebar:
     st.header("🛠️ System Status & Informants")
     st.success("Core Model: Gemini 3 Flash")
@@ -13,7 +13,6 @@ with st.sidebar:
     st.markdown("---")
     
     st.header("🕹️ Operation Mode")
-    # This allows the user to switch between the original sim and the "Autopilot" diagnostic view
     app_mode = st.radio("Select Drive Mode:", ["Standard Simulation", "Autopilot OS Mode"])
     
     if app_mode == "Autopilot OS Mode":
@@ -26,16 +25,13 @@ with st.sidebar:
             st.checkbox("Emergency Braking (AEB)", value=True)
     
     st.markdown("---")
-    st.caption("v2.6.0 - Video Integration Build")
+    st.caption("v2.7.0 - Heading Rotation Build")
 
-# --- MAIN UI: Header & Playable Video ---
+# --- MAIN UI: Header & Playable Video (Preserved) ---
 st.markdown("<h1 style='text-align: center;'>🚗 Vectra AI – Autopilot Simulation</h1>", unsafe_allow_html=True)
 
-# PRESERVING THE ORIGINAL VIDEO & MAKING IT PLAYABLE
 with st.container():
     st.subheader("📹 AI Self-Driving Core Demonstration")
-    
-    # Using the raw link so Streamlit can play the MP4 directly
     video_url = "https://github.com/Deslandes1/Vectra-AI-Built-by-Gesner-Deslandes/raw/main/AI%20Selfdriving.mp4"
     
     col1, col2 = st.columns([2, 1])
@@ -50,8 +46,7 @@ with st.container():
 
 st.markdown("---")
 
-# 2. THE SIMULATION ENGINE
-# Note: Spawning logic is preserved: 1st=2, 2nd=2, 4th=4.
+# 2. THE SIMULATION ENGINE (Enhanced with Body Rotation)
 sim_html = f"""
 <style>
     body {{ margin: 0; background-color: #0e1117; color: white; font-family: sans-serif; }}
@@ -86,22 +81,27 @@ sim_html = f"""
         const MODE = "{app_mode}"; 
         
         let speedLimit = 3.5;
-        let car = {{ x: 50, y: 250, w: 34, h: 18, speed: 0 }};
+        let car = {{ x: 50, y: 250, w: 34, h: 18, speed: 0, angle: 0 }};
         let obstacles = [];
         let spawnClicks = 0;
 
         function getRoadCenter(x) {{ return H/2 + Math.sin(x/150)*40; }}
+
+        // Core Physics: Calculate the angle of the road at any point x
+        function getRoadAngle(x) {{
+            let x1 = x;
+            let x2 = x + 2;
+            let y1 = getRoadCenter(x1);
+            let y2 = getRoadCenter(x2);
+            return Math.atan2(y2 - y1, x2 - x1);
+        }}
 
         window.setLimit = (label, val) => {{ speedLimit = val; }};
 
         document.getElementById('spawnBtn').onclick = () => {{
             spawnClicks++;
             document.getElementById('clickDisp').innerText = spawnClicks;
-            
-            // PRECISE SPAWNING LOGIC: 1st=2, 2nd=2, 4th=4
-            let qty = 1;
-            if (spawnClicks === 1 || spawnClicks === 2) qty = 2;
-            else if (spawnClicks === 4) qty = 4;
+            let qty = (spawnClicks === 1 || spawnClicks === 2) ? 2 : (spawnClicks === 4 ? 4 : 1);
 
             for(let i=0; i<qty; i++) {{
                 let spawnX = W + (i * 160) + 50;
@@ -115,23 +115,22 @@ sim_html = f"""
         }};
 
         function update() {{
+            // AI Car Logic
             let roadMid = getRoadCenter(car.x + car.w/2);
             let targetY = roadMid + 20;
             car.y += (targetY - car.y) * 0.1;
-
-            // Boundary Lane-Lock Logic
-            if (car.y < roadMid + 2) car.y = roadMid + 2;
-            if (car.y + car.h > roadMid + 48) car.y = roadMid + 48 - car.h;
+            car.angle = getRoadAngle(car.x);
 
             car.speed += (speedLimit - car.speed) * 0.05;
             car.x += car.speed;
             if (car.x > W) car.x = -50;
 
+            // Obstacle Logic
             obstacles.forEach(o => {{
                 o.x -= o.speed;
                 o.y = getRoadCenter(o.x % W) - 30;
-                
-                // Safety Collision Logic
+                o.angle = getRoadAngle(o.x) + Math.PI; // Pointing opposite direction
+
                 if (car.x < o.x + o.w && car.x + car.w > o.x &&
                     car.y < o.y + o.h && car.y + car.h > o.y) {{
                     car.speed = 0;
@@ -141,38 +140,51 @@ sim_html = f"""
             document.getElementById('speedDisp').innerText = (car.speed * 12.5).toFixed(1);
         }}
 
+        function drawCar(x, y, w, h, angle, color, isAutopilot) {{
+            ctx.save();
+            ctx.translate(x + w/2, y + h/2);
+            ctx.rotate(angle);
+            
+            // Body
+            ctx.fillStyle = color;
+            ctx.fillRect(-w/2, -h/2, w, h);
+            
+            // Headlights (visual orientation)
+            ctx.fillStyle = "white";
+            ctx.fillRect(w/2 - 4, -h/2 + 2, 4, 3);
+            ctx.fillRect(w/2 - 4, h/2 - 5, 4, 3);
+
+            if (MODE === "Autopilot OS Mode" && isAutopilot) {{
+                ctx.strokeStyle = "#00ffcc88";
+                ctx.setLineDash([3, 3]);
+                ctx.strokeRect(-w/2 - 5, -h/2 - 5, w + 10, h + 10);
+            }}
+            ctx.restore();
+        }}
+
         function draw() {{
             ctx.fillStyle = "#111";
             ctx.fillRect(0,0,W,H);
 
-            // Draw Road Base
+            // Draw Road
             ctx.beginPath();
-            for(let x=0; x<=W; x+=10) ctx.lineTo(x, getRoadCenter(x));
+            for(let x=0; x<=W; x+=1) ctx.lineTo(x, getRoadCenter(x));
             ctx.lineWidth = 100; ctx.strokeStyle = "#333"; ctx.stroke();
 
-            // Draw Center Line (Lane separation)
+            // Draw Dashed Lane Marker
             ctx.beginPath();
             ctx.setLineDash([15, 15]);
-            for(let x=0; x<=W; x+=10) ctx.lineTo(x, getRoadCenter(x));
-            ctx.lineWidth = 2; ctx.strokeStyle = "#ffffff55"; ctx.stroke();
+            for(let x=0; x<=W; x+=5) ctx.lineTo(x, getRoadCenter(x));
+            ctx.lineWidth = 2; ctx.strokeStyle = "#ffffff44"; ctx.stroke();
             ctx.setLineDash([]);
 
-            // SOFTWARE MODE OVERLAYS
-            if (MODE === "Autopilot OS Mode") {{
-                ctx.strokeStyle = "#00ffcc88";
-                ctx.setLineDash([5, 5]);
-                ctx.strokeRect(car.x - 5, car.y - 5, car.w + 10, car.h + 10);
-                obstacles.forEach(o => ctx.strokeRect(o.x - 2, o.y - 2, o.w + 4, o.h + 4));
-                ctx.setLineDash([]);
-            }}
+            // Draw Main Car
+            drawCar(car.x, car.y, car.w, car.h, car.angle, "#2ecc71", true);
 
-            // Draw AI Car (Green)
-            ctx.fillStyle = "#2ecc71";
-            ctx.fillRect(car.x, car.y, car.w, car.h);
-
-            // Draw Obstacles (Red)
-            ctx.fillStyle = "#e63946";
-            obstacles.forEach(o => ctx.fillRect(o.x, o.y, o.w, o.h));
+            // Draw Obstacles
+            obstacles.forEach(o => {{
+                drawCar(o.x, o.y, o.w, o.h, o.angle, "#e63946", false);
+            }});
 
             update();
             requestAnimationFrame(draw);

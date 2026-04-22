@@ -6,7 +6,7 @@ st.set_page_config(page_title="Vectra AI – Autopilot OS", layout="wide")
 # --- SIDEBAR: Informants & Mode Toggle ---
 with st.sidebar:
     st.header("🛠️ System Status & Informants")
-    st.success("Core Model: Gemini 1.5 Flash")
+    st.success("Core Model: Gemini 3 Flash")
     st.info("Vectra AI System: Active")
     st.write("Developer: **Gesner Deslandes**")
     
@@ -26,17 +26,27 @@ with st.sidebar:
             st.checkbox("Emergency Braking (AEB)", value=True)
     
     st.markdown("---")
-    st.caption("v2.5.1 - Stable Build")
+    st.caption("v2.6.0 - Video Integration Build")
 
-# --- MAIN UI: Header & Original Video Reference ---
+# --- MAIN UI: Header & Playable Video ---
 st.markdown("<h1 style='text-align: center;'>🚗 Vectra AI – Autopilot Simulation</h1>", unsafe_allow_html=True)
 
-# PRESERVING THE ORIGINAL VIDEO INFORMATION
+# PRESERVING THE ORIGINAL VIDEO & MAKING IT PLAYABLE
 with st.container():
-    st.subheader("📹 Project Source & Reference")
-    st.write("This simulation is built upon the logic established in the core project file:")
-    st.code("https://github.com/Deslandes1/Vectra-AI-Built-by-Gesner-Deslandes/blob/main/AI%20Selfdriving.mp4", language="markdown")
-    st.info("The video above demonstrates the initial AI Self-Driving logic that powers this interactive environment.")
+    st.subheader("📹 AI Self-Driving Core Demonstration")
+    
+    # Using the raw link so Streamlit can play the MP4 directly
+    video_url = "https://github.com/Deslandes1/Vectra-AI-Built-by-Gesner-Deslandes/raw/main/AI%20Selfdriving.mp4"
+    
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        st.video(video_url)
+    with col2:
+        st.write("**Video Specifications:**")
+        st.write("- **Project Name:** AI Self-Driving Logic")
+        st.write("- **Primary Logic:** Neural Network Pathfinding")
+        st.write("- **Status:** Original Core Implementation")
+        st.write("[View on GitHub](https://github.com/Deslandes1/Vectra-AI-Built-by-Gesner-Deslandes/)")
 
 st.markdown("---")
 
@@ -151,9 +161,7 @@ sim_html = f"""
             if (MODE === "Autopilot OS Mode") {{
                 ctx.strokeStyle = "#00ffcc88";
                 ctx.setLineDash([5, 5]);
-                // Perception Bounding Box for AI Car
                 ctx.strokeRect(car.x - 5, car.y - 5, car.w + 10, car.h + 10);
-                // Perception Bounding Box for Traffic
                 obstacles.forEach(o => ctx.strokeRect(o.x - 2, o.y - 2, o.w + 4, o.h + 4));
                 ctx.setLineDash([]);
             }}

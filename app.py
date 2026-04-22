@@ -3,16 +3,30 @@ import streamlit as st
 # 1. SYSTEM CONFIG & PRESERVATION
 st.set_page_config(page_title="Vectra AI – Autopilot OS", layout="wide")
 
-# --- SIDEBAR: Informants & Mode Toggle (Preserved) ---
+# --- SIDEBAR: Company Informants, Pricing & Mode Toggle ---
 with st.sidebar:
-    st.header("🛠️ System Status & Informants")
-    st.success("Core Model: Gemini 3 Flash")
-    st.info("Vectra AI System: Active")
-    st.write("Developer: **Gesner Deslandes**")
+    st.header("🏢 GlobalInternet.py")
+    st.success("Founder: Gesner Deslandes")
+    st.info("Status: Active | Global Operations (Haiti)")
+    
+    with st.expander("💳 Software Business Model"):
+        st.write("**Zero Subscriptions:** One-time licensing fees only.")
+        st.write("**Full Access:** All purchases include full source code.")
+        st.write("**Support:** 1 year of technical setup included.")
+    
+    with st.expander("💰 Enterprise Pricing"):
+        st.markdown("""
+        | Product | Price |
+        | :--- | :--- |
+        | **Voting Software** | $2,000 |
+        | **Drone Commander** | $2,000 |
+        | **School Management**| $1,500 |
+        | **Digital Marketing**| $150 - $1,200 |
+        | **Chess Game** | $20 |
+        """)
     
     st.markdown("---")
-    
-    st.header("🕹️ Operation Mode")
+    st.header("🕹️ Autopilot Mode")
     app_mode = st.radio("Select Drive Mode:", ["Standard Simulation", "Autopilot OS Mode"])
     
     if app_mode == "Autopilot OS Mode":
@@ -25,7 +39,8 @@ with st.sidebar:
             st.checkbox("Emergency Braking (AEB)", value=True)
     
     st.markdown("---")
-    st.caption("v2.8.0 - Safe Distance Spawning")
+    st.write("📞 **WhatsApp:** (509) 4738-5663")
+    st.caption("v2.9.0 - Enterprise Build")
 
 # --- MAIN UI: Header & Playable Video (Preserved) ---
 st.markdown("<h1 style='text-align: center;'>🚗 Vectra AI – Autopilot Simulation</h1>", unsafe_allow_html=True)
@@ -38,15 +53,13 @@ with st.container():
     with col1:
         st.video(video_url)
     with col2:
-        st.write("**Video Specifications:**")
-        st.write("- **Project Name:** AI Self-Driving Logic")
-        st.write("- **Primary Logic:** Neural Network Pathfinding")
-        st.write("- **Status:** Original Core Implementation")
-        st.write("[View on GitHub](https://github.com/Deslandes1/Vectra-AI-Built-by-Gesner-Deslandes/)")
+        st.write("**GlobalInternet.py Solutions**")
+        st.write("Specialized in Python development, AI, and secure management systems.")
+        st.write("[View Project Source](https://github.com/Deslandes1/Vectra-AI-Built-by-Gesner-Deslandes/)")
 
 st.markdown("---")
 
-# 2. THE SIMULATION ENGINE (Enhanced with Staggered Spawning)
+# 2. THE SIMULATION ENGINE (With Staggered Spawning & Rotation)
 sim_html = f"""
 <style>
     body {{ margin: 0; background-color: #0e1117; color: white; font-family: sans-serif; }}
@@ -62,7 +75,7 @@ sim_html = f"""
 <div class="status-bar">
     <div class="status-item">🛰️ GPS: <span id="gpsDisp">CONNECTED</span></div>
     <div class="status-item">🏎️ SPEED: <span id="speedDisp">0.0</span></div>
-    <div class="status-item">🎲 CLICK INDEX: <span id="clickDisp">0</span></div>
+    <div class="status-item">🎲 INDEX: <span id="clickDisp">0</span></div>
 </div>
 
 <div style="text-align: center; margin-top: 20px;">
@@ -84,15 +97,13 @@ sim_html = f"""
         let car = {{ x: 50, y: 250, w: 34, h: 18, speed: 0, angle: 0 }};
         let obstacles = [];
         let spawnClicks = 0;
-        const SAFE_DISTANCE = 180; // Pixels between oncoming cars
+        const SAFE_DISTANCE = 180;
 
         function getRoadCenter(x) {{ return H/2 + Math.sin(x/150)*40; }}
 
         function getRoadAngle(x) {{
-            let x1 = x;
-            let x2 = x + 2;
-            let y1 = getRoadCenter(x1);
-            let y2 = getRoadCenter(x2);
+            let x1 = x, x2 = x + 2;
+            let y1 = getRoadCenter(x1), y2 = getRoadCenter(x2);
             return Math.atan2(y2 - y1, x2 - x1);
         }}
 
@@ -101,18 +112,13 @@ sim_html = f"""
         document.getElementById('spawnBtn').onclick = () => {{
             spawnClicks++;
             document.getElementById('clickDisp').innerText = spawnClicks;
-            
-            // Scaled Spawning: 1st=2, 2nd=2, 4th=4
-            let qty = 1;
-            if (spawnClicks === 1 || spawnClicks === 2) qty = 2;
-            else if (spawnClicks === 4) qty = 4;
+            let qty = (spawnClicks === 1 || spawnClicks === 2) ? 2 : (spawnClicks === 4 ? 4 : 1);
 
             for(let i=0; i<qty; i++) {{
-                // Staggered entry: offset each car by the SAFE_DISTANCE
                 let spawnX = W + (i * SAFE_DISTANCE) + 50;
                 obstacles.push({{
                     x: spawnX,
-                    y: getRoadCenter(spawnX % W) - 30, // Left Lane (oncoming)
+                    y: getRoadCenter(spawnX % W) - 30, 
                     w: 30, h: 18,
                     speed: speedLimit * 0.85
                 }});
@@ -121,7 +127,7 @@ sim_html = f"""
 
         function update() {{
             let roadMid = getRoadCenter(car.x + car.w/2);
-            let targetY = roadMid + 20; // Right Lane (AI Car)
+            let targetY = roadMid + 20;
             car.y += (targetY - car.y) * 0.1;
             car.angle = getRoadAngle(car.x);
 
@@ -131,17 +137,15 @@ sim_html = f"""
 
             obstacles.forEach(o => {{
                 o.x -= o.speed;
-                // Keep obstacle on the left side of the road map
                 o.y = getRoadCenter(o.x % W) - 30;
                 o.angle = getRoadAngle(o.x) + Math.PI; 
 
-                // Simple AEB (Autonomous Emergency Braking)
                 if (car.x < o.x + o.w && car.x + car.w > o.x &&
                     car.y < o.y + o.h && car.y + car.h > o.y) {{
                     car.speed = 0;
                 }}
             }});
-            obstacles = obstacles.filter(o => o.x > -1000); // Filter after they are well off-screen
+            obstacles = obstacles.filter(o => o.x > -1000);
             document.getElementById('speedDisp').innerText = (car.speed * 12.5).toFixed(1);
         }}
 
@@ -151,8 +155,6 @@ sim_html = f"""
             ctx.rotate(angle);
             ctx.fillStyle = color;
             ctx.fillRect(-w/2, -h/2, w, h);
-            
-            // Headlights
             ctx.fillStyle = "white";
             ctx.fillRect(w/2 - 4, -h/2 + 2, 4, 3);
             ctx.fillRect(w/2 - 4, h/2 - 5, 4, 3);
@@ -168,13 +170,9 @@ sim_html = f"""
         function draw() {{
             ctx.fillStyle = "#111";
             ctx.fillRect(0,0,W,H);
-
-            // Draw Road
             ctx.beginPath();
             for(let x=0; x<=W; x+=1) ctx.lineTo(x, getRoadCenter(x));
             ctx.lineWidth = 100; ctx.strokeStyle = "#333"; ctx.stroke();
-
-            // Draw Lane Divider
             ctx.beginPath();
             ctx.setLineDash([15, 15]);
             for(let x=0; x<=W; x+=5) ctx.lineTo(x, getRoadCenter(x));

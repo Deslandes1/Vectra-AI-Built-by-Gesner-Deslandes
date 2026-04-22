@@ -25,7 +25,7 @@ with st.sidebar:
             st.checkbox("Emergency Braking (AEB)", value=True)
     
     st.markdown("---")
-    st.caption("v2.7.0 - Heading Rotation Build")
+    st.caption("v2.8.0 - Safe Distance Spawning")
 
 # --- MAIN UI: Header & Playable Video (Preserved) ---
 st.markdown("<h1 style='text-align: center;'>🚗 Vectra AI – Autopilot Simulation</h1>", unsafe_allow_html=True)
@@ -46,7 +46,7 @@ with st.container():
 
 st.markdown("---")
 
-# 2. THE SIMULATION ENGINE (Enhanced with Body Rotation)
+# 2. THE SIMULATION ENGINE (Enhanced with Staggered Spawning)
 sim_html = f"""
 <style>
     body {{ margin: 0; background-color: #0e1117; color: white; font-family: sans-serif; }}
@@ -84,10 +84,10 @@ sim_html = f"""
         let car = {{ x: 50, y: 250, w: 34, h: 18, speed: 0, angle: 0 }};
         let obstacles = [];
         let spawnClicks = 0;
+        const SAFE_DISTANCE = 180; // Pixels between oncoming cars
 
         function getRoadCenter(x) {{ return H/2 + Math.sin(x/150)*40; }}
 
-        // Core Physics: Calculate the angle of the road at any point x
         function getRoadAngle(x) {{
             let x1 = x;
             let x2 = x + 2;
@@ -101,13 +101,18 @@ sim_html = f"""
         document.getElementById('spawnBtn').onclick = () => {{
             spawnClicks++;
             document.getElementById('clickDisp').innerText = spawnClicks;
-            let qty = (spawnClicks === 1 || spawnClicks === 2) ? 2 : (spawnClicks === 4 ? 4 : 1);
+            
+            // Scaled Spawning: 1st=2, 2nd=2, 4th=4
+            let qty = 1;
+            if (spawnClicks === 1 || spawnClicks === 2) qty = 2;
+            else if (spawnClicks === 4) qty = 4;
 
             for(let i=0; i<qty; i++) {{
-                let spawnX = W + (i * 160) + 50;
+                // Staggered entry: offset each car by the SAFE_DISTANCE
+                let spawnX = W + (i * SAFE_DISTANCE) + 50;
                 obstacles.push({{
                     x: spawnX,
-                    y: getRoadCenter(spawnX % W) - 30,
+                    y: getRoadCenter(spawnX % W) - 30, // Left Lane (oncoming)
                     w: 30, h: 18,
                     speed: speedLimit * 0.85
                 }});
@@ -115,9 +120,8 @@ sim_html = f"""
         }};
 
         function update() {{
-            // AI Car Logic
             let roadMid = getRoadCenter(car.x + car.w/2);
-            let targetY = roadMid + 20;
+            let targetY = roadMid + 20; // Right Lane (AI Car)
             car.y += (targetY - car.y) * 0.1;
             car.angle = getRoadAngle(car.x);
 
@@ -125,18 +129,19 @@ sim_html = f"""
             car.x += car.speed;
             if (car.x > W) car.x = -50;
 
-            // Obstacle Logic
             obstacles.forEach(o => {{
                 o.x -= o.speed;
+                // Keep obstacle on the left side of the road map
                 o.y = getRoadCenter(o.x % W) - 30;
-                o.angle = getRoadAngle(o.x) + Math.PI; // Pointing opposite direction
+                o.angle = getRoadAngle(o.x) + Math.PI; 
 
+                // Simple AEB (Autonomous Emergency Braking)
                 if (car.x < o.x + o.w && car.x + car.w > o.x &&
                     car.y < o.y + o.h && car.y + car.h > o.y) {{
                     car.speed = 0;
                 }}
             }});
-            obstacles = obstacles.filter(o => o.x > -150);
+            obstacles = obstacles.filter(o => o.x > -1000); // Filter after they are well off-screen
             document.getElementById('speedDisp').innerText = (car.speed * 12.5).toFixed(1);
         }}
 
@@ -144,12 +149,10 @@ sim_html = f"""
             ctx.save();
             ctx.translate(x + w/2, y + h/2);
             ctx.rotate(angle);
-            
-            // Body
             ctx.fillStyle = color;
             ctx.fillRect(-w/2, -h/2, w, h);
             
-            // Headlights (visual orientation)
+            // Headlights
             ctx.fillStyle = "white";
             ctx.fillRect(w/2 - 4, -h/2 + 2, 4, 3);
             ctx.fillRect(w/2 - 4, h/2 - 5, 4, 3);
@@ -171,17 +174,14 @@ sim_html = f"""
             for(let x=0; x<=W; x+=1) ctx.lineTo(x, getRoadCenter(x));
             ctx.lineWidth = 100; ctx.strokeStyle = "#333"; ctx.stroke();
 
-            // Draw Dashed Lane Marker
+            // Draw Lane Divider
             ctx.beginPath();
             ctx.setLineDash([15, 15]);
             for(let x=0; x<=W; x+=5) ctx.lineTo(x, getRoadCenter(x));
             ctx.lineWidth = 2; ctx.strokeStyle = "#ffffff44"; ctx.stroke();
             ctx.setLineDash([]);
 
-            // Draw Main Car
             drawCar(car.x, car.y, car.w, car.h, car.angle, "#2ecc71", true);
-
-            // Draw Obstacles
             obstacles.forEach(o => {{
                 drawCar(o.x, o.y, o.w, o.h, o.angle, "#e63946", false);
             }});

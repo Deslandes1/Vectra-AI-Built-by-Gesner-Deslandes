@@ -3,11 +3,18 @@ import streamlit as st
 # 1. SYSTEM CONFIG & PRESERVATION
 st.set_page_config(page_title="Vectra AI – Autopilot OS", layout="wide")
 
-# --- SIDEBAR: Company Informants, Pricing & Mode Toggle ---
+# --- SIDEBAR: Company Informants, Contact & Mode Toggle ---
 with st.sidebar:
     st.header("🏢 GlobalInternet.py")
     st.success("Founder: Gesner Deslandes")
-    st.info("Status: Active | Global Operations (Haiti)")
+    
+    # NEW: DIRECT CONTACT INFORMANTS
+    st.markdown("### 📬 Contact Information")
+    st.write("📧 **Email:** deslandes78@gmail.com")
+    st.write("📞 **Phone:** (509) 4738-5663")
+    st.write("📍 **Base:** Port-au-Prince, Haiti")
+    
+    st.markdown("---")
     
     with st.expander("💳 Software Business Model"):
         st.write("**Zero Subscriptions:** One-time licensing fees only.")
@@ -39,8 +46,7 @@ with st.sidebar:
             st.checkbox("Emergency Braking (AEB)", value=True)
     
     st.markdown("---")
-    st.write("📞 **WhatsApp:** (509) 4738-5663")
-    st.caption("v2.9.0 - Enterprise Build")
+    st.caption("v3.0.0 - Professional Contact Build")
 
 # --- MAIN UI: Header & Playable Video (Preserved) ---
 st.markdown("<h1 style='text-align: center;'>🚗 Vectra AI – Autopilot Simulation</h1>", unsafe_allow_html=True)
@@ -59,7 +65,7 @@ with st.container():
 
 st.markdown("---")
 
-# 2. THE SIMULATION ENGINE (With Staggered Spawning & Rotation)
+# 2. THE SIMULATION ENGINE (Maintained with Body Rotation & Safe Distance)
 sim_html = f"""
 <style>
     body {{ margin: 0; background-color: #0e1117; color: white; font-family: sans-serif; }}
@@ -97,7 +103,7 @@ sim_html = f"""
         let car = {{ x: 50, y: 250, w: 34, h: 18, speed: 0, angle: 0 }};
         let obstacles = [];
         let spawnClicks = 0;
-        const SAFE_DISTANCE = 180;
+        const SAFE_DISTANCE = 180; // Distance between oncoming cars
 
         function getRoadCenter(x) {{ return H/2 + Math.sin(x/150)*40; }}
 
@@ -118,7 +124,7 @@ sim_html = f"""
                 let spawnX = W + (i * SAFE_DISTANCE) + 50;
                 obstacles.push({{
                     x: spawnX,
-                    y: getRoadCenter(spawnX % W) - 30, 
+                    y: getRoadCenter(spawnX % W) - 30, // Oncoming Lane
                     w: 30, h: 18,
                     speed: speedLimit * 0.85
                 }});
@@ -127,7 +133,7 @@ sim_html = f"""
 
         function update() {{
             let roadMid = getRoadCenter(car.x + car.w/2);
-            let targetY = roadMid + 20;
+            let targetY = roadMid + 20; // Driving Lane
             car.y += (targetY - car.y) * 0.1;
             car.angle = getRoadAngle(car.x);
 
@@ -140,6 +146,7 @@ sim_html = f"""
                 o.y = getRoadCenter(o.x % W) - 30;
                 o.angle = getRoadAngle(o.x) + Math.PI; 
 
+                // Basic AEB Collision Check
                 if (car.x < o.x + o.w && car.x + car.w > o.x &&
                     car.y < o.y + o.h && car.y + car.h > o.y) {{
                     car.speed = 0;
@@ -170,9 +177,13 @@ sim_html = f"""
         function draw() {{
             ctx.fillStyle = "#111";
             ctx.fillRect(0,0,W,H);
+            
+            // Draw Road
             ctx.beginPath();
             for(let x=0; x<=W; x+=1) ctx.lineTo(x, getRoadCenter(x));
             ctx.lineWidth = 100; ctx.strokeStyle = "#333"; ctx.stroke();
+            
+            // Draw Center Line
             ctx.beginPath();
             ctx.setLineDash([15, 15]);
             for(let x=0; x<=W; x+=5) ctx.lineTo(x, getRoadCenter(x));
